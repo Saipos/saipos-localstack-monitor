@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Poppins', 'Arial', sans-serif;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #f0f5ff 0%, #eeeeee 100%);
+    font-family: 'Poppins', 'Arial', sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-lg border border-saipos-gray-100 transition-all duration-200;
+  }
+
+  .card:hover {
+    @apply shadow-xl transform scale-[1.01];
+  }
+
+  .btn-primary {
+    @apply bg-saipos-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-saipos-blue-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-saipos-blue-500 focus:ring-offset-2 shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply bg-saipos-gray-100 text-saipos-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-saipos-gray-200 hover:text-saipos-blue-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-saipos-gray-400 focus:ring-offset-2 border border-saipos-gray-200;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .status-active {
+    @apply bg-accent-100 text-accent-800;
+  }
+
+  .status-processing {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .status-error {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .metric-card {
+    @apply bg-gradient-to-br from-white to-saipos-gray-50 p-6 rounded-xl shadow-md border border-saipos-gray-200 transition-all duration-200;
+  }
+
+  .metric-card:hover {
+    @apply shadow-lg border-saipos-blue-200;
+  }
+}

@@ -1,0 +1,169 @@
+import { useState } from 'react';
+import { Play, Eye } from 'lucide-react';
+import { LocalStackApiService } from '../../services/localstack-api';
+
+export function DebugPanel() {
+  const [debugResults, setDebugResults] = useState<any[]>([]);
+  const [testing, setTesting] = useState(false);
+
+  const runTests = async () => {
+    setTesting(true);
+    const results: any[] = [];
+
+    // Test 1: API Server connectivity
+    try {
+      const response = await fetch('http://localhost:3002/health');
+      const data = await response.json();
+      results.push({
+        test: 'API Server Health',
+        status: response.ok ? 'SUCCESS' : 'FAILED',
+        details: data
+      });
+    } catch (error) {
+      results.push({
+        test: 'API Server Health',
+        status: 'ERROR',
+        details: error
+      });
+    }
+
+    // Test 2: LocalStack connectivity
+    try {
+      const response = await fetch('http://localhost:3002/test-localstack');
+      const data = await response.json();
+      results.push({
+        test: 'LocalStack Connection',
+        status: data.connected ? 'SUCCESS' : 'FAILED',
+        details: data
+      });
+    } catch (error) {
+      results.push({
+        test: 'LocalStack Connection',
+        status: 'ERROR',
+        details: error
+      });
+    }
+
+    // Test 3: DynamoDB Service
+    try {
+      const dynamoStats = await LocalStackApiService.getDynamoDBStats();
+      results.push({
+        test: 'DynamoDB Service',
+        status: 'SUCCESS',
+        details: {
+          totalTables: dynamoStats.totalTables,
+          totalItems: dynamoStats.totalItems,
+          tables: dynamoStats.tables.map(t => t.name)
+        }
+      });
+    } catch (error) {
+      results.push({
+        test: 'DynamoDB Service',
+        status: 'ERROR',
+        details: error
+      });
+    }
+
+    // Test 4: SQS Service
+    try {
+      const sqsStats = await LocalStackApiService.getSQSStats();
+      results.push({
+        test: 'SQS Service',
+        status: 'SUCCESS',
+        details: {
+          totalQueues: sqsStats.totalQueues,
+          totalVisibleMessages: sqsStats.totalVisibleMessages,
+          queues: sqsStats.queues.map(q => q.name)
+        }
+      });
+    } catch (error) {
+      results.push({
+        test: 'SQS Service',
+        status: 'ERROR',
+        details: error
+      });
+    }
+
+    // Test 5: CloudWatch Logs Service
+    try {
+      const logsStats = await LocalStackApiService.getCloudWatchLogsStats();
+      results.push({
+        test: 'CloudWatch Logs Service',
+        status: 'SUCCESS',
+        details: {
+          totalGroups: logsStats.totalGroups,
+          totalStoredBytes: logsStats.totalStoredBytes,
+          logGroups: logsStats.logGroups.map(g => g.logGroupName)
+        }
+      });
+    } catch (error) {
+      results.push({
+        test: 'CloudWatch Logs Service',
+        status: 'ERROR',
+        details: error
+      });
+    }
+
+    setDebugResults(results);
+    setTesting(false);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'SUCCESS': return 'text-green-600 bg-green-50';
+      case 'FAILED': return 'text-red-600 bg-red-50';
+      case 'ERROR': return 'text-red-600 bg-red-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold">Debug Panel</h2>
+        <button
+          onClick={runTests}
+          disabled={testing}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <Play className={`w-4 h-4 ${testing ? 'animate-spin' : ''}`} />
+          <span>{testing ? 'Executando...' : 'Executar Testes'}</span>
+        </button>
+      </div>
+
+      {debugResults.length > 0 && (
+        <div className="space-y-4">
+          {debugResults.map((result, index) => (
+            <div key={index} className="border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-medium">{result.test}</h3>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(result.status)}`}>
+                  {result.status}
+                </span>
+              </div>
+
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 flex items-center">
+                  <Eye className="w-3 h-3 mr-1" />
+                  Ver Detalhes
+                </summary>
+                <div className="mt-2 p-3 bg-gray-50 rounded text-xs">
+                  <pre className="whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(result.details, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {debugResults.length === 0 && !testing && (
+        <div className="text-center py-8 text-gray-500">
+          <Play className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p>Clique em "Executar Testes" para depurar a conectividade</p>
+        </div>
+      )}
+    </div>
+  );
+}
