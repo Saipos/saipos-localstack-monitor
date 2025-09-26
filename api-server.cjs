@@ -4,12 +4,15 @@ const cors = require('cors');
 const { spawn } = require('child_process');
 
 const app = express();
-const PORT = 3002;
+const PORT = 3006;
 const LOCALSTACK_URL = 'http://localhost:4566';
 
-// Enable CORS for all routes
+// Enable JSON body parsing
+app.use(express.json());
+
+// Enable CORS para requisições do frontend
 app.use(cors({
-  origin: ['http://localhost:3001', 'http://localhost:3000', 'http://localhost:3003', 'http://127.0.0.1:3001', 'http://127.0.0.1:3003'],
+  origin: ['http://localhost:3001', 'http://localhost:3000', 'http://localhost:3003', 'http://localhost:3005', 'http://127.0.0.1:3001', 'http://127.0.0.1:3003', 'http://127.0.0.1:3005'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
@@ -39,7 +42,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Test LocalStack connectivity
+// Teste de conexão com LocalStack
 app.get('/test-localstack', async (req, res) => {
   try {
     const fetch = (await import('node-fetch')).default;
@@ -59,7 +62,7 @@ app.get('/test-localstack', async (req, res) => {
   }
 });
 
-// Helper function to execute AWS CLI commands
+// Função para executar comandos AWS CLI
 function executeAwsCommand(args) {
   return new Promise((resolve, reject) => {
     const awsArgs = [
@@ -67,6 +70,8 @@ function executeAwsCommand(args) {
       '--endpoint-url', LOCALSTACK_URL,
       ...args
     ];
+
+    console.log('Full AWS Command:', 'aws', awsArgs.join(' '));
 
     const aws = spawn('aws', awsArgs);
     let stdout = '';
@@ -86,7 +91,6 @@ function executeAwsCommand(args) {
           const result = JSON.parse(stdout);
           resolve(result);
         } catch (error) {
-          // If not JSON, return raw output
           resolve({ raw: stdout.trim() });
         }
       } else {
@@ -164,6 +168,96 @@ app.get('/api/sqs/queue-attributes', async (req, res) => {
   }
 });
 
+// SQS Message Operations
+app.post('/api/sqs/receive-messages', async (req, res) => {
+  try {
+    const { queueUrl, maxNumberOfMessages = 10, waitTimeSeconds = 0, visibilityTimeout = 30 } = req.body;
+
+    if (!queueUrl) {
+      return res.status(400).json({ error: 'queueUrl is required' });
+    }
+
+    const args = [
+      'sqs', 'receive-message',
+      '--queue-url', queueUrl,
+      '--max-number-of-messages', maxNumberOfMessages.toString(),
+      '--wait-time-seconds', waitTimeSeconds.toString(),
+      '--visibility-timeout', visibilityTimeout.toString(),
+      '--attribute-names', 'All',
+      '--message-attribute-names', 'All'
+    ];
+
+    const result = await executeAwsCommand(args);
+    res.json(result);
+  } catch (error) {
+    console.error('Error receiving SQS messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sqs/send-message', async (req, res) => {
+  try {
+    const { queueUrl, messageBody, messageAttributes = {}, messageGroupId, messageDeduplicationId } = req.body;
+
+    console.log('SQS Send Message Request:', { queueUrl, messageBody, messageGroupId, messageDeduplicationId, messageAttributes });
+
+    if (!queueUrl || !messageBody) {
+      return res.status(400).json({ error: 'queueUrl and messageBody are required' });
+    }
+
+    const args = [
+      'sqs', 'send-message',
+      '--queue-url', queueUrl,
+      '--message-body', messageBody
+    ];
+
+    // Add parâmetros opcionais para filas FIFO
+    if (messageGroupId) {
+      args.push('--message-group-id', messageGroupId);
+    }
+
+    if (messageDeduplicationId) {
+      args.push('--message-deduplication-id', messageDeduplicationId);
+    }
+
+    // Adicionar atributos de mensagem se fornecidos
+    if (Object.keys(messageAttributes).length > 0) {
+      args.push('--message-attributes');
+      args.push(JSON.stringify(messageAttributes));
+    }
+
+    console.log('AWS CLI Command:', args);
+
+    const result = await executeAwsCommand(args);
+    res.json(result);
+  } catch (error) {
+    console.error('Error sending SQS message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sqs/delete-message', async (req, res) => {
+  try {
+    const { queueUrl, receiptHandle } = req.body;
+
+    if (!queueUrl || !receiptHandle) {
+      return res.status(400).json({ error: 'queueUrl and receiptHandle are required' });
+    }
+
+    const args = [
+      'sqs', 'delete-message',
+      '--queue-url', queueUrl,
+      '--receipt-handle', receiptHandle
+    ];
+
+    await executeAwsCommand(args);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting SQS message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Lambda endpoints
 app.get('/api/lambda/functions', async (req, res) => {
   try {
@@ -172,6 +266,155 @@ app.get('/api/lambda/functions', async (req, res) => {
   } catch (error) {
     console.error('Error listing functions:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/lambda/function/:functionName', async (req, res) => {
+  try {
+    const { functionName } = req.params;
+    const result = await executeAwsCommand(['lambda', 'get-function', '--function-name', functionName]);
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting function:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/lambda/invoke', async (req, res) => {
+  try {
+    const { functionName, payload } = req.body;
+
+    if (!functionName) {
+      return res.status(400).json({ error: 'functionName is required' });
+    }
+
+    const args = [
+      'lambda', 'invoke',
+      '--function-name', functionName,
+      '--payload', payload || '{}',
+      '--cli-binary-format', 'raw-in-base64-out',
+      '/tmp/lambda-response.json'
+    ];
+
+    console.log('Lambda Invoke Command:', args);
+
+    const result = await executeAwsCommand(args);
+
+    try {
+      const fs = require('fs');
+      const responsePayload = fs.readFileSync('/tmp/lambda-response.json', 'utf8');
+
+      res.json({
+        ...result,
+        ResponsePayload: responsePayload
+      });
+    } catch (fileError) {
+      console.warn('Could not read response file:', fileError);
+      res.json(result);
+    }
+  } catch (error) {
+    console.error('Error invoking function:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CloudWatch Metrics endpoints
+app.get('/api/cloudwatch/metrics/:functionName', async (req, res) => {
+  try {
+    const { functionName } = req.params;
+    const { startTime, endTime, period } = req.query;
+
+    // Por padrão, buscar métricas das últimas 24 horas
+    const start = startTime || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const end = endTime || new Date().toISOString();
+    const metricPeriod = period || '300'; // 5 minutes
+
+    // Obter várias métricas para a função Lambda
+    const metrics = [
+      'Invocations',
+      'Duration',
+      'Errors',
+      'Throttles',
+      'ConcurrentExecutions'
+    ];
+
+    const results = {};
+
+    for (const metricName of metrics) {
+      try {
+        const args = [
+          'cloudwatch', 'get-metric-statistics',
+          '--namespace', 'AWS/Lambda',
+          '--metric-name', metricName,
+          '--dimensions', `Name=FunctionName,Value=${functionName}`,
+          '--start-time', start,
+          '--end-time', end,
+          '--period', metricPeriod,
+          '--statistics', metricName === 'Duration' ? 'Average,Maximum' : 'Sum'
+        ];
+
+        const result = await executeAwsCommand(args);
+        results[metricName] = result.Datapoints || [];
+      } catch (error) {
+        console.warn(`Failed to get metric ${metricName}:`, error.message);
+        results[metricName] = [];
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error getting CloudWatch metrics:', error);
+    // Return empty results structure instead of error status
+    res.json({
+      Invocations: [],
+      Duration: [],
+      Errors: [],
+      Throttles: [],
+      ConcurrentExecutions: []
+    });
+  }
+});
+
+app.get('/api/cloudwatch/insights/:functionName', async (req, res) => {
+  try {
+    const { functionName } = req.params;
+
+    // Comando para iniciar uma consulta no CloudWatch Logs Insights
+    const query = `
+      fields @timestamp, @duration, @billedDuration, @memorySize, @maxMemoryUsed
+      | filter @type = "REPORT"
+      | sort @timestamp desc
+      | limit 100
+    `;
+
+    const args = [
+      'logs', 'start-query',
+      '--log-group-name', `/aws/lambda/${functionName}`,
+      '--start-time', Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000).toString(),
+      '--end-time', Math.floor(Date.now() / 1000).toString(),
+      '--query-string', query
+    ];
+
+    const startResult = await executeAwsCommand(args);
+
+    if (startResult.queryId) {
+      // Esperar alguns segundos para a consulta ser processada
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const getResultsArgs = [
+        'logs', 'get-query-results',
+        '--query-id', startResult.queryId
+      ];
+
+      const queryResults = await executeAwsCommand(getResultsArgs);
+      res.json(queryResults);
+    } else {
+      res.json({ results: [] });
+    }
+  } catch (error) {
+    console.error('Error getting CloudWatch Insights:', error);
+    // Retornar estrutura vazia em vez de erro
+    res.json({ results: [] });
   }
 });
 
@@ -226,7 +469,7 @@ app.get('/api/logs/events', async (req, res) => {
   }
 });
 
-// Proxy all requests to LocalStack
+// Proxy para LocalStack
 app.use('/aws', createProxyMiddleware({
   target: LOCALSTACK_URL,
   changeOrigin: true,
@@ -273,7 +516,7 @@ app.use('/aws', createProxyMiddleware({
   }
 }));
 
-// Handle preflight requests
+// Lidar com requisições OPTIONS para CORS
 app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');

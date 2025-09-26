@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
-import { FileText, Download, Search, Filter, RefreshCw } from 'lucide-react';
+import { Download, FileText, Filter, Search } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { usePageRefresh } from '../../hooks/useGlobalRefresh';
+import { LocalStackApiService } from '../../services/localstack-api';
+import { ServiceWrapper } from '../shared/ServiceStatus';
 
 interface LogEvent {
   timestamp: number;
@@ -19,28 +22,17 @@ export function LambdaLogsViewer() {
   const [logEvents, setLogEvents] = useState<LogEvent[]>([]);
   const [logStreams, setLogStreams] = useState<LogStream[]>([]);
   const [selectedStream, setSelectedStream] = useState<string>('');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [levelFilter, setLevelFilter] = useState('all');
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isServiceAvailable, setIsServiceAvailable] = useState<boolean>(false);
+  const [checkingService, setCheckingService] = useState(true);
 
-  useEffect(() => {
-    loadLogStreams();
-  }, []);
-
-  useEffect(() => {
-    if (selectedStream && autoRefresh) {
-      const interval = setInterval(loadLogEvents, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [selectedStream, autoRefresh]);
-
-  const loadLogStreams = async () => {
+  const loadLogStreams = useCallback(async () => {
     try {
       setError(null);
 
-      // Try to get real log streams from LocalStack via proxy
+      // TODO - implementar chamada via LocalStackApiService
       const response = await fetch('/api/localstack/', {
         method: 'POST',
         headers: {
@@ -65,7 +57,10 @@ export function LambdaLogsViewer() {
           loadLogEvents(streams[0].logStreamName);
         }
       } else {
-        throw new Error(`HTTP ${response.status}`);
+        if (response.status === 500) {
+          throw new Error('Serviço CloudWatch Logs indisponível');
+        }
+        throw new Error(`Erro ao carregar streams de log: ${response.status}`);
       }
     } catch (err) {
       console.warn('Could not load log streams, using mock data:', err);
@@ -93,9 +88,37 @@ export function LambdaLogsViewer() {
       }
       setError('Using mock data - LocalStack connection failed');
     } finally {
-      setLoading(false);
+      setCheckingService(false);
     }
-  };
+  }, []);
+
+  const checkServiceAvailability = useCallback(async () => {
+    setCheckingService(true);
+    const available = await LocalStackApiService.isCloudWatchLogsAvailable();
+    setIsServiceAvailable(available);
+    setCheckingService(false);
+    return available;
+  }, []);
+
+  const refreshLogEvents = useCallback(async () => {
+    const available = await checkServiceAvailability();
+    if (available && selectedStream) {
+      await loadLogEvents();
+    }
+  }, [selectedStream, checkServiceAvailability]);
+
+  // Registra esta página no sistema global de refresh
+  usePageRefresh('lambda-logs-viewer', refreshLogEvents);
+
+  useEffect(() => {
+    const initService = async () => {
+      const available = await checkServiceAvailability();
+      if (available) {
+        loadLogStreams();
+      }
+    };
+    initService();
+  }, [checkServiceAvailability]);
 
   const loadLogEvents = async (streamName?: string) => {
     const stream = streamName || selectedStream;
@@ -111,7 +134,7 @@ export function LambdaLogsViewer() {
         body: JSON.stringify({
           logGroupName: '/aws/lambda/user-analytics-events-events-consumer',
           logStreamName: stream,
-          startTime: Date.now() - 3600000, // Last hour
+          startTime: Date.now() - 3600000,
         }),
       });
 
@@ -119,17 +142,22 @@ export function LambdaLogsViewer() {
         const data = await response.json();
         const events: LogEvent[] = data.events || [];
 
-        // Parse log levels from messages
         const parsedEvents = events.map(event => ({
           ...event,
           level: extractLogLevel(event.message),
         }));
 
-        setLogEvents(parsedEvents.reverse()); // Show newest first
+        setLogEvents(parsedEvents.reverse()); 
+      } else {
+        if (response.status === 500) {
+          throw new Error('Serviço CloudWatch Logs indisponível');
+        }
+        throw new Error(`Erro ao carregar eventos de log: ${response.status}`);
       }
     } catch (err) {
       console.warn('Could not load log events:', err);
       loadMockLogEvents();
+      throw err;
     }
   };
 
@@ -221,26 +249,12 @@ export function LambdaLogsViewer() {
           <h2 className="text-xl font-semibold text-gray-900">Lambda Logs</h2>
         </div>
         <div className="flex items-center space-x-3">
-          <label className="flex items-center space-x-2 text-sm">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <span>Auto-refresh</span>
-          </label>
-          <button
-            onClick={() => loadLogEvents()}
-            disabled={loading}
-            className="btn-secondary flex items-center space-x-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
           <button
             onClick={exportLogs}
-            className="btn-primary flex items-center space-x-2"
+            disabled={!isServiceAvailable}
+            className={`btn-primary flex items-center space-x-2 ${
+              !isServiceAvailable ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
             <Download className="w-4 h-4" />
             <span>Export</span>
@@ -248,7 +262,12 @@ export function LambdaLogsViewer() {
         </div>
       </div>
 
-      {error && (
+      <ServiceWrapper
+        serviceName="CloudWatch Logs"
+        isAvailable={isServiceAvailable}
+        isLoading={checkingService}
+      >
+        {error && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center">
             <FileText className="w-5 h-5 text-yellow-600 mr-2" />
@@ -351,6 +370,7 @@ export function LambdaLogsViewer() {
           )}
         </div>
       </div>
+      </ServiceWrapper>
     </div>
   );
 }

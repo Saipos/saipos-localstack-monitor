@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Database, MessageSquare, Activity, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import { MetricCard } from '../shared/MetricCard';
+import { Activity, AlertCircle, CheckCircle, Clock, Database, MessageSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { DynamoDBService } from '../../services/dynamodb';
-import { SQSService } from '../../services/sqs';
 import { LocalStackDirectService } from '../../services/localstack-direct';
+import { SQSService } from '../../services/sqs';
 import type { DashboardMetrics, QueueStats } from '../../types';
+import { MetricCard } from '../shared/MetricCard';
 
 export function OverviewDashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics>({
@@ -29,7 +29,7 @@ export function OverviewDashboard() {
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(loadDashboardData, 5000); // Update every 5 seconds
+    const interval = setInterval(loadDashboardData, 5000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -37,8 +37,9 @@ export function OverviewDashboard() {
     try {
       setError(null);
 
-      // Try to load real data, but provide fallback
-      let tokens: any[] = [];
+      let tokens: { isActive: boolean;
+  platform: string;
+  idStore: number}[] = [];
       let queueData = {
         visibleMessages: 0,
         notVisibleMessages: 0,
@@ -47,7 +48,6 @@ export function OverviewDashboard() {
       };
 
       try {
-        // First try AWS SDK
         const [tokensResult, queueResult] = await Promise.all([
           DynamoDBService.getAllTokens(),
           SQSService.getQueueStats(),
@@ -58,26 +58,21 @@ export function OverviewDashboard() {
       } catch (apiError) {
         console.warn('AWS SDK failed, trying direct LocalStack API:', apiError);
 
-        // Try direct LocalStack API as fallback
         try {
           const isConnected = await LocalStackDirectService.testConnection();
 
           if (isConnected) {
-            // Get real data using direct API
             const [tableItems, queues] = await Promise.all([
               LocalStackDirectService.scanDynamoTable('user-analytics-events-platform-tokens'),
               LocalStackDirectService.getSQSQueues(),
             ]);
 
-            // Transform DynamoDB items to our format
-            tokens = tableItems.map((item: any) => ({
+            tokens = tableItems.map((item: { isActive?: { BOOL: boolean }, platform?: { S: string }, idStore?: { N: string } }) => ({
               isActive: item.isActive?.BOOL ?? true,
               platform: item.platform?.S ?? 'unknown',
               idStore: parseInt(item.idStore?.N ?? '0'),
-              // Add other fields as needed
             }));
 
-            // Get queue stats if we have queues
             if (queues.length > 0) {
               const queueUrl = queues.find(q => q.includes('user-analytics-events-events.fifo')) || queues[0];
               const attributes = await LocalStackDirectService.getQueueAttributes(queueUrl);
@@ -97,7 +92,6 @@ export function OverviewDashboard() {
         } catch (directApiError) {
           console.warn('Direct API also failed, using mock data:', directApiError);
 
-          // Use mock data if everything fails
           tokens = [
             { isActive: true, platform: 'meta', idStore: 123 },
             { isActive: true, platform: 'google', idStore: 123 },
@@ -114,7 +108,6 @@ export function OverviewDashboard() {
         }
       }
 
-      // Calculate metrics
       const totalTokens = tokens.length;
       const activeTokens = tokens.filter(token => token.isActive).length;
 

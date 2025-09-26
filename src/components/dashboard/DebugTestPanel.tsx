@@ -1,14 +1,13 @@
+import { AlertCircle, Bug, CheckCircle, Eye, Play, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { Play, Eye, CheckCircle, AlertCircle, RefreshCw, Bug } from 'lucide-react';
 import { LocalStackApiService } from '../../services/localstack-api';
+import { HEALTH_CHECK_URL, TEST_LOCALSTACK_URL } from '../../constants';
+import type { DebugResult, TestResults } from '../../types';
 
 export function DebugTestPanel() {
-  const [debugResults, setDebugResults] = useState<any[]>([]);
-  const [testResults, setTestResults] = useState<{
-    dynamodb: boolean | null;
-    sqs: boolean | null;
-    logs: boolean | null;
-  }>({
+  const [debugResults, setDebugResults] = useState<DebugResult[]>([]);
+
+  const [testResults, setTestResults] = useState<TestResults>({
     dynamodb: null,
     sqs: null,
     logs: null,
@@ -29,11 +28,11 @@ export function DebugTestPanel() {
 
   const runDebugTests = async () => {
     setDebugTesting(true);
-    const results: any[] = [];
+    const results: DebugResult[] = [];
 
     // Test 1: API Server connectivity
     try {
-      const response = await fetch('http://localhost:3002/health');
+      const response = await fetch(HEALTH_CHECK_URL);
       const data = await response.json();
       results.push({
         test: 'API Server Health',
@@ -44,13 +43,13 @@ export function DebugTestPanel() {
       results.push({
         test: 'API Server Health',
         status: 'ERROR',
-        details: error
+        details: error as Record<string, unknown>
       });
     }
 
     // Test 2: LocalStack connectivity
     try {
-      const response = await fetch('http://localhost:3002/test-localstack');
+      const response = await fetch(TEST_LOCALSTACK_URL);
       const data = await response.json();
       results.push({
         test: 'LocalStack Connection',
@@ -61,7 +60,7 @@ export function DebugTestPanel() {
       results.push({
         test: 'LocalStack Connection',
         status: 'ERROR',
-        details: error
+        details: error as Record<string, unknown>
       });
     }
 
@@ -81,7 +80,7 @@ export function DebugTestPanel() {
       results.push({
         test: 'DynamoDB Service',
         status: 'ERROR',
-        details: error
+        details: error as Record<string, unknown>
       });
     }
 
@@ -101,7 +100,7 @@ export function DebugTestPanel() {
       results.push({
         test: 'SQS Service',
         status: 'ERROR',
-        details: error
+        details: error as Record<string, unknown>
       });
     }
 
@@ -121,7 +120,7 @@ export function DebugTestPanel() {
       results.push({
         test: 'CloudWatch Logs Service',
         status: 'ERROR',
-        details: error
+        details: error as Record<string, unknown>
       });
     }
 
@@ -158,7 +157,7 @@ export function DebugTestPanel() {
 
       // Test CloudWatch Logs
       try {
-        const logsStats = await LocalStackApiService.getCloudWatchLogsStats();
+        await LocalStackApiService.getCloudWatchLogsStats();
         results.logs = true;
       } catch (error) {
         console.error('CloudWatch Logs test failed:', error);
@@ -268,7 +267,7 @@ export function DebugTestPanel() {
             <h4 className="font-medium text-blue-900 mb-2">Dicas de Solução:</h4>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Verificar se LocalStack está rodando: <code className="bg-blue-100 px-1 rounded">curl http://localhost:4566/health</code></li>
-              <li>• Verificar se API Server está ativo: <code className="bg-blue-100 px-1 rounded">curl http://localhost:3002/health</code></li>
+              <li>• Verificar se API Server está ativo: <code className="bg-blue-100 px-1 rounded">curl http://localhost:3006/health</code></li>
               <li>• Se as conexões falharem, o dashboard usará dados mock para demonstração</li>
             </ul>
           </div>

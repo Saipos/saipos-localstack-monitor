@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { Header } from './components/layout/Header';
 import saiposLogo from './assets/logo.png';
+import { CONNECTION_STATUS_CONFIG } from './constants';
+import { BasicLocalStackDashboard } from './components/dashboard/BasicLocalStackDashboard';
 import { DebugTestPanel } from './components/dashboard/DebugTestPanel';
 import { DynamoDBView } from './components/dashboard/DynamoDBView';
-import { SQSView } from './components/dashboard/SQSView';
 import { LambdaLogsViewer } from './components/dashboard/LambdaLogsViewer';
-import { BasicLocalStackDashboard } from './components/dashboard/BasicLocalStackDashboard';
-import { ProjectSelector, type ProjectMode } from './components/shared/ProjectSelector';
+import { LambdaView } from './components/dashboard/LambdaView';
+import { SQSView } from './components/dashboard/SQSView';
+import { Header } from './components/layout/Header';
+import { ErrorBoundary } from './components/shared/ErrorBoundary';
+import { GlobalRefreshProvider, useGlobalRefresh } from './hooks/useGlobalRefresh';
 
-function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { connectionStatus } = useGlobalRefresh();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -19,6 +23,8 @@ function App() {
         return <DynamoDBView />;
       case 'queue':
         return <SQSView />;
+      case 'lambda':
+        return <LambdaView />;
       case 'logs':
         return <LambdaLogsViewer />;
       case 'debug':
@@ -28,19 +34,27 @@ function App() {
     }
   };
 
+  const getFooterConnectionStatus = () => {
+    return CONNECTION_STATUS_CONFIG[connectionStatus] || CONNECTION_STATUS_CONFIG.disconnected;
+  };
+
+  const footerStatus = getFooterConnectionStatus();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-saipos-gray-50 to-saipos-gray-100 font-poppins">
 
       {/* Navigation tabs */}
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {renderContent()}
+      <main style={{ minHeight: 'calc(100vh - 220px)' }} className="max-w-[100rem] mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <ErrorBoundary>
+          {renderContent()}
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}
-      <footer className="mt-16 py-8 border-t border-saipos-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="py-8 border-t border-saipos-gray-200 bg-white">
+        <div className="max-w-[100rem] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <img
@@ -53,13 +67,21 @@ function App() {
               </p>
             </div>
             <div className="flex items-center space-x-4 text-sm text-saipos-gray-600">
-              <span className="font-medium">Connected to LocalStack</span>
-              <div className="w-2 h-2 bg-accent-500 rounded-full animate-pulse"></div>
+              <span className="font-medium">{footerStatus.text}</span>
+              <div className={`w-2 h-2 ${footerStatus.color} rounded-full ${connectionStatus === 'connected' ? 'animate-pulse' : ''}`}></div>
             </div>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <GlobalRefreshProvider defaultInterval={10000}>
+      <AppContent />
+    </GlobalRefreshProvider>
   );
 }
 

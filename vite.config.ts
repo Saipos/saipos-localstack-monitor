@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       // Proxy AWS requests to our intermediary API server
       '/aws': {
-        target: 'http://localhost:3002',
+        target: 'http://localhost:3006',
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {

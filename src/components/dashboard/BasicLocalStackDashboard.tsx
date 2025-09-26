@@ -1,34 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Database, MessageSquare, Zap, FileText, AlertCircle, RefreshCw, Eye, Activity } from 'lucide-react';
-import { MetricCard } from '../shared/MetricCard';
-import { StatusBadge } from '../shared/StatusBadge';
+import { Activity, AlertCircle, Database, Eye, FileText, MessageSquare, RefreshCw, Zap } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useGlobalRefresh, usePageRefresh } from '../../hooks/useGlobalRefresh';
 import { LocalStackApiService } from '../../services/localstack-api';
-
-interface ServiceStats {
-  dynamodb: {
-    tables: any[];
-    totalTables: number;
-    totalItems: number;
-  };
-  sqs: {
-    queues: any[];
-    totalQueues: number;
-    totalVisibleMessages: number;
-    totalNotVisibleMessages: number;
-  };
-  lambda: {
-    functions: any[];
-    totalFunctions: number;
-    totalSize: number;
-  };
-  logs: {
-    logGroups: any[];
-    totalGroups: number;
-    totalStoredBytes: number;
-  };
-  connected: boolean;
-  lastUpdated: Date;
-}
+import type { LogEvent, ServiceStats } from '../../types';
+import { formatBytes, formatTimestamp } from '../../utils';
+import { MetricCard } from '../shared/MetricCard';
 
 interface BasicLocalStackDashboardProps {
   onTabChange?: (tab: string) => void;
@@ -47,28 +23,77 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<any[]>([]);
+  const [tableData, setTableData] = useState<Record<string, unknown>[]>([]);
   const [selectedLogGroup, setSelectedLogGroup] = useState<string | null>(null);
-  const [logEvents, setLogEvents] = useState<any[]>([]);
+  const [logEvents, setLogEvents] = useState<LogEvent[]>([]);
+  const [serviceAvailability, setServiceAvailability] = useState({
+    dynamodb: false,
+    sqs: false,
+    lambda: false,
+    logs: false
+  });
+  const [localstackStatus, setLocalstackStatus] = useState<'checking' | 'offline' | 'online' | 'empty'>('checking');
 
-  useEffect(() => {
-    loadStats();
-    const interval = setInterval(loadStats, 10000); // Update every 10 seconds
-    return () => clearInterval(interval);
+  const checkServiceAvailability = useCallback(async () => {
+    const [dynamodb, sqs, lambda, logs] = await Promise.all([
+      LocalStackApiService.isDynamoDBAvailable(),
+      LocalStackApiService.isSQSAvailable(),
+      LocalStackApiService.isLambdaAvailable(),
+      LocalStackApiService.isCloudWatchLogsAvailable()
+    ]);
+
+    setServiceAvailability({ dynamodb, sqs, lambda, logs });
+
+    const availableServices = [dynamodb, sqs, lambda, logs].filter(Boolean).length;
+
+    if (availableServices === 0) {
+      setLocalstackStatus('offline');
+    } else {
+      setLocalstackStatus('online');
+    }
+
+    return { dynamodb, sqs, lambda, logs };
   }, []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setError(null);
+      const availability = await checkServiceAvailability();
       const serviceStats = await LocalStackApiService.getServiceStats();
       setStats(serviceStats);
+
+      const hasAnyData = serviceStats.dynamodb.totalTables > 0 ||
+                        serviceStats.sqs.totalQueues > 0 ||
+                        serviceStats.lambda.totalFunctions > 0 ||
+                        serviceStats.logs.totalGroups > 0;
+
+      if (Object.values(availability).some(Boolean) && !hasAnyData) {
+        setLocalstackStatus('empty');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load LocalStack stats');
-      console.error('Basic dashboard error:', err);
+      setStats(prev => ({
+        ...prev,
+        connected: false,
+        dynamodb: { tables: [], totalTables: 0, totalItems: 0 },
+        sqs: { queues: [], totalQueues: 0, totalVisibleMessages: 0, totalNotVisibleMessages: 0 },
+        lambda: { functions: [], totalFunctions: 0, totalSize: 0 },
+        logs: { logGroups: [], totalGroups: 0, totalStoredBytes: 0 }
+      }));
+      throw err;
     } finally {
       setLoading(false);
     }
-  };
+  }, [checkServiceAvailability]);
+
+  const { connectionStatus } = useGlobalRefresh();
+
+  usePageRefresh('overview-dashboard', loadStats);
+
+  useEffect(() => {
+    setLocalstackStatus('checking');
+    loadStats();
+  }, [loadStats]);
 
   const loadTableData = async (tableName: string) => {
     try {
@@ -76,7 +101,7 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
       const data = await LocalStackApiService.scanTable(tableName, 10);
       setTableData(data);
     } catch (error) {
-      console.error(`Failed to load table data for ${tableName}:`, error);
+      console.error(`Failed to load data for table ${tableName}:`, error);
       setTableData([]);
     }
   };
@@ -84,24 +109,12 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
   const loadLogEvents = async (logGroupName: string) => {
     try {
       setSelectedLogGroup(logGroupName);
-      const events = await LocalStackApiService.getLogEvents(logGroupName, 20);
+      const events = await LocalStackApiService.getLogEvents(logGroupName);
       setLogEvents(events);
     } catch (error) {
-      console.error(`Failed to load log events for ${logGroupName}:`, error);
+      console.error(`Failed to load log events for group ${logGroupName}:`, error);
       setLogEvents([]);
     }
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
   };
 
   if (loading) {
@@ -133,67 +146,118 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">LocalStack Monitor</h1>
-          <p className="text-gray-600">Monitoramento genérico dos serviços AWS</p>
+      {localstackStatus === 'checking' && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-3"></div>
+            <div>
+              <h3 className="text-gray-800 font-medium">Verificando LocalStack...</h3>
+              <p className="text-gray-600 text-sm">
+                Conectando aos serviços AWS e verificando disponibilidade.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <StatusBadge status={stats.connected ? 'success' : 'error'}>
-            {stats.connected ? 'Conectado' : 'Desconectado'}
-          </StatusBadge>
-          <button
-            onClick={loadStats}
-            className="btn-primary flex items-center space-x-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Atualizar</span>
-          </button>
+      )}
+
+      {localstackStatus === 'offline' && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="text-red-800 font-medium">LocalStack Offline</h3>
+              <p className="text-red-700 text-sm mt-1">
+                O LocalStack não está respondendo. Verifique se está rodando e tente novamente.
+              </p>
+              <div className="mt-3">
+                <button
+                  onClick={loadStats}
+                  className="btn-primary text-sm"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Tentar Novamente
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {localstackStatus === 'empty' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="text-blue-800 font-medium">LocalStack Vazio</h3>
+              <p className="text-blue-700 text-sm mt-1">
+                O LocalStack está rodando, mas ainda não possui recursos criados. Para começar:
+              </p>
+              <ul className="text-blue-700 text-sm mt-2 ml-4 space-y-1">
+                <li>• Crie tabelas DynamoDB usando a CLI ou SDK</li>
+                <li>• Configure filas SQS para processamento de mensagens</li>
+                <li>• Implante funções Lambda para automação</li>
+                <li>• Execute suas aplicações para gerar logs no CloudWatch</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {localstackStatus === 'online' && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <Activity className="w-5 h-5 text-green-600 mr-3" />
+            <div>
+              <h3 className="text-green-800 font-medium">LocalStack Ativo</h3>
+              <p className="text-green-700 text-sm">
+                LocalStack está rodando com {Object.values(serviceAvailability).filter(Boolean).length} serviços disponíveis e recursos configurados.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Service Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="DynamoDB Tables"
-          value={stats.dynamodb.totalTables}
-          subtitle={`${stats.dynamodb.totalItems} items total`}
+          value={serviceAvailability.dynamodb ? stats.dynamodb.totalTables : "N/A"}
+          subtitle={serviceAvailability.dynamodb ? `${stats.dynamodb.totalItems} items total` : "Serviço indisponível"}
           icon={Database}
-          color="blue"
-          onClick={() => onTabChange?.('tokens')}
+          color={serviceAvailability.dynamodb ? "blue" : "gray"}
+          onClick={serviceAvailability.dynamodb ? () => onTabChange?.('tokens') : undefined}
         />
 
         <MetricCard
           title="SQS Queues"
-          value={stats.sqs.totalQueues}
-          subtitle={`${stats.sqs.totalVisibleMessages} mensagens visíveis`}
+          value={serviceAvailability.sqs ? stats.sqs.totalQueues : "N/A"}
+          subtitle={serviceAvailability.sqs ? `${stats.sqs.totalVisibleMessages} mensagens visíveis` : "Serviço indisponível"}
           icon={MessageSquare}
-          color="green"
-          onClick={() => onTabChange?.('queue')}
+          color={serviceAvailability.sqs ? "green" : "gray"}
+          onClick={serviceAvailability.sqs ? () => onTabChange?.('queue') : undefined}
         />
 
         <MetricCard
           title="Lambda Functions"
-          value={stats.lambda.totalFunctions}
-          subtitle={formatBytes(stats.lambda.totalSize)}
+          value={serviceAvailability.lambda ? stats.lambda.totalFunctions : "N/A"}
+          subtitle={serviceAvailability.lambda ? formatBytes(stats.lambda.totalSize) : "Serviço indisponível"}
           icon={Zap}
-          color="purple"
-          onClick={() => onTabChange?.('logs')}
+          color={serviceAvailability.lambda ? "purple" : "gray"}
+          onClick={serviceAvailability.lambda ? () => onTabChange?.('logs') : undefined}
         />
 
         <MetricCard
           title="Log Groups"
-          value={stats.logs.totalGroups}
-          subtitle={formatBytes(stats.logs.totalStoredBytes)}
+          value={serviceAvailability.logs ? stats.logs.totalGroups : "N/A"}
+          subtitle={serviceAvailability.logs ? formatBytes(stats.logs.totalStoredBytes) : "Serviço indisponível"}
           icon={FileText}
-          color="yellow"
-          onClick={() => onTabChange?.('logs')}
+          color={serviceAvailability.logs ? "yellow" : "gray"}
+          onClick={serviceAvailability.logs ? () => onTabChange?.('logs') : undefined}
         />
       </div>
 
       {/* SQS Queue Details */}
-      {stats.sqs.queues.length > 0 && (
+      {serviceAvailability.sqs && stats.sqs.queues.length > 0 && (
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">SQS Queues</h3>
           <div className="space-y-3">
@@ -228,7 +292,7 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">DynamoDB Tables</h3>
-          {stats.dynamodb.tables.length > 0 ? (
+          {serviceAvailability.dynamodb && stats.dynamodb.tables.length > 0 ? (
             <div className="space-y-2">
               {stats.dynamodb.tables.map((table, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
@@ -250,9 +314,13 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
                 </div>
               ))}
             </div>
-          ) : (
+          ) : serviceAvailability.dynamodb ? (
             <div className="text-center py-4 text-gray-500">
               Nenhuma tabela encontrada
+            </div>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              Serviço DynamoDB indisponível
             </div>
           )}
         </div>
@@ -287,25 +355,29 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
         {/* Lambda Functions */}
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Lambda Functions</h3>
-          {stats.lambda.functions.length > 0 ? (
+          {serviceAvailability.lambda && stats.lambda.functions.length > 0 ? (
             <div className="space-y-2">
               {stats.lambda.functions.map((func, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <Zap className="w-4 h-4 text-purple-600" />
                     <div>
-                      <div className="font-medium text-gray-900">{func.functionName}</div>
+                      <div className="font-medium text-gray-900">{func.FunctionName}</div>
                       <div className="text-sm text-gray-500">
-                        {func.runtime} • {formatBytes(func.codeSize)} • {func.state}
+                        {func.Runtime} • {formatBytes(func.CodeSize)} • {func.State}
                       </div>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          ) : (
+          ) : serviceAvailability.lambda ? (
             <div className="text-center py-4 text-gray-500">
               Nenhuma função encontrada
+            </div>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              Serviço Lambda indisponível
             </div>
           )}
         </div>
@@ -313,7 +385,7 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
         {/* Log Groups */}
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">CloudWatch Log Groups</h3>
-          {stats.logs.logGroups.length > 0 ? (
+          {serviceAvailability.logs && stats.logs.logGroups.length > 0 ? (
             <div className="space-y-2">
               {stats.logs.logGroups.map((group, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
@@ -335,9 +407,13 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
                 </div>
               ))}
             </div>
-          ) : (
+          ) : serviceAvailability.logs ? (
             <div className="text-center py-4 text-gray-500">
               Nenhum log group encontrado
+            </div>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              Serviço CloudWatch Logs indisponível
             </div>
           )}
         </div>
@@ -374,15 +450,8 @@ export function BasicLocalStackDashboard({ onTabChange }: BasicLocalStackDashboa
       <div className="flex justify-center">
         <div className="flex items-center space-x-4 text-sm text-gray-500">
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full animate-pulse ${stats.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span>{stats.connected ? 'Conectado ao LocalStack' : 'Desconectado'}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Activity className="w-3 h-3 text-blue-500" />
-            <span>Atualização automática a cada 10 segundos</span>
-          </div>
-          <div className="text-xs text-gray-400">
-            Última atualização: {stats.lastUpdated.toLocaleTimeString()}
+            <div className={`w-2 h-2 rounded-full animate-pulse ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span>{connectionStatus === 'connected' ? 'Conectado ao LocalStack' : 'Desconectado do LocalStack'}</span>
           </div>
         </div>
       </div>

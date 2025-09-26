@@ -1,7 +1,4 @@
-interface StatusBadgeProps {
-  status: 'active' | 'inactive' | 'processing' | 'error' | 'success';
-  children: React.ReactNode;
-}
+import type { StatusBadgeProps } from '../../types';
 
 export function StatusBadge({ status, children }: StatusBadgeProps) {
   const statusClasses = {

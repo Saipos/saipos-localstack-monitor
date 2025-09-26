@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run api\" \"npm run frontend\"",
-    "frontend": "vite --port 3001 --host",
+    "frontend": "vite --port 3005 --host",
     "api": "node api-server.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

@@ -1,13 +1,13 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { SQSClient } from '@aws-sdk/client-sqs';
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 // LocalStack configuration
 const isDevelopment = import.meta.env.DEV;
 const localStackConfig = {
   region: 'us-east-1',
-  endpoint: isDevelopment ? '/aws' : 'http://localhost:3002/aws',
+  endpoint: isDevelopment ? '/aws' : 'http://localhost:3006/aws',
   credentials: {
     accessKeyId: 'test',
     secretAccessKey: 'test'

@@ -1,18 +1,21 @@
+import { Eye, Play } from 'lucide-react';
 import { useState } from 'react';
-import { Play, Eye } from 'lucide-react';
 import { LocalStackApiService } from '../../services/localstack-api';
+import { HEALTH_CHECK_URL, TEST_LOCALSTACK_URL } from '../../constants';
+import type { DebugResult } from '../../types';
 
 export function DebugPanel() {
-  const [debugResults, setDebugResults] = useState<any[]>([]);
+
+  const [debugResults, setDebugResults] = useState<DebugResult[]>([]);
   const [testing, setTesting] = useState(false);
 
   const runTests = async () => {
     setTesting(true);
-    const results: any[] = [];
+    const results: DebugResult[] = [];
 
     // Test 1: API Server connectivity
     try {
-      const response = await fetch('http://localhost:3002/health');
+      const response = await fetch(HEALTH_CHECK_URL);
       const data = await response.json();
       results.push({
         test: 'API Server Health',
@@ -29,7 +32,7 @@ export function DebugPanel() {
 
     // Test 2: LocalStack connectivity
     try {
-      const response = await fetch('http://localhost:3002/test-localstack');
+      const response = await fetch(TEST_LOCALSTACK_URL);
       const data = await response.json();
       results.push({
         test: 'LocalStack Connection',

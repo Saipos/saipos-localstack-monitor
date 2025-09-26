@@ -2,11 +2,6 @@ import { Database } from 'lucide-react';
 
 export type ProjectMode = 'basic';
 
-interface ProjectSelectorProps {
-  selectedProject: ProjectMode;
-  onProjectChange: (project: ProjectMode) => void;
-}
-
 const project = {
   id: 'basic' as ProjectMode,
   name: 'LocalStack Monitor',
@@ -17,7 +12,7 @@ const project = {
   borderColor: 'border-blue-200'
 };
 
-export function ProjectSelector({ selectedProject, onProjectChange }: ProjectSelectorProps) {
+export function ProjectSelector() {
   return (
     <div className="relative">
       <div className="flex items-center space-x-3 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm min-w-64">

@@ -1,63 +1,69 @@
-// Analytics Platform Token
-export interface AnalyticsPlatformToken {
-  idPlatformToken: string;
-  idStore: number;
-  idStoreSiteData: number;
-  platform: 'meta' | 'google' | 'tiktok';
-  tokenEncrypted: string;
-  tokenLast6Digits: string;
-  pixelId: string;
-  idUser: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// Centralized type exports
+export * from './api/aws-api';
+export * from './domain';
 
-// Analytics Event
-export interface AnalyticsEvent {
-  event: string;
-  value: {
-    content_type: string;
-    content_ids: number[];
-    value: number;
-    currency: string;
-    contents: Array<{
-      id: string;
-      quantity: number;
-      item_price: number;
-    }>;
-  };
-}
+// Export component types with specific names to avoid conflicts
+export type {
+  // UI Components
+  BaseComponentProps,
+  ColorVariant,
+  SizeVariant,
+  StatusVariant,
+  StatusBadgeStatus,
+  StatusBadgeProps,
+  MetricCardProps,
+  ServiceStatusProps,
+  ConnectionStatusProps,
+  ErrorBoundaryProps,
+  ErrorBoundaryState,
+  HeaderProps,
+  ProjectMode,
+  ProjectSelectorProps,
 
-// SQS Queue Stats
-export interface QueueStats {
-  visibleMessages: number;
-  notVisibleMessages: number;
-  totalMessages: number;
-  lastUpdated: Date;
-}
+  // Dashboard Components (use prefixes for conflicting types)
+  ServiceMetricsSectionProps,
+  StoreData,
+  StoreTokensViewProps,
+  LambdaFunctionDetailsProps,
+  LogEvent as ComponentLogEvent,
+  LogStream as ComponentLogStream,
+  LambdaLogsViewerProps,
+  InvocationResult,
+  DebugResult,
+  DebugTestPanelProps,
+  TestResults,
+  BasicLocalStackDashboardProps,
+  LambdaFunctionDisplay,
+  QueueInfo as ComponentQueueInfo,
+  QueueMetrics,
+  QueueHistoryPoint,
+  DynamoTable,
+  LambdaSectionProps,
+  LogsSectionProps,
+  DynamoDBSectionProps,
 
-// Lambda Log Event
-export interface LambdaLogEvent {
-  timestamp: string;
-  message: string;
-  level: 'info' | 'warn' | 'error';
-}
+  // Charts
+  ChartDataPoint,
+  ChartType,
+  ChartColorKey,
+  MetricsChartProps,
 
-// Dashboard Metrics
-export interface DashboardMetrics {
-  totalTokens: number;
-  activeTokens: number;
-  totalEvents: number;
-  successfulEvents: number;
-  failedEvents: number;
-  processingRate: number;
-}
+  // Tables
+  TableColumn,
+  TableSortConfig,
+  DynamoDBItem,
+  DynamoDBRawItem,
+  DynamoDBTableProps,
+  DataTableProps,
+  TablePaginationProps,
 
-// Event Test Configuration
-export interface EventTestConfig {
-  eventType: 'AddToCart' | 'Purchase' | 'PageView';
-  storeId: number;
-  numberOfEvents: number;
-  intervalMs: number;
-}
+  // Forms (use prefixes for conflicting types)
+  RefreshControlProps,
+  SearchFilterProps,
+  FilterOption,
+  SQSMessage as ComponentSQSMessage,
+  SQSMessagesViewerProps,
+  PageConnectionStatusProps,
+  ButtonProps,
+  InputProps
+} from './components';

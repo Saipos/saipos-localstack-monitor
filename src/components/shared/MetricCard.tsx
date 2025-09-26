@@ -1,16 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
+import type { MetricCardProps } from '../../types';
 
-interface MetricCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: string;
+interface MetricCardPropsWithIcon extends Omit<MetricCardProps, 'icon'> {
   icon: LucideIcon;
-  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'gray';
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
-  onClick?: () => void;
 }
 
 export function MetricCard({
@@ -20,8 +12,9 @@ export function MetricCard({
   icon: Icon,
   color = 'blue',
   trend,
-  onClick
-}: MetricCardProps) {
+  onClick,
+  className
+}: MetricCardPropsWithIcon) {
   const colorClasses = {
     blue: 'from-saipos-blue-500 to-saipos-blue-600',
     green: 'from-accent-500 to-accent-600',
@@ -35,7 +28,7 @@ export function MetricCard({
 
   return (
     <CardWrapper
-      className={`metric-card group ${onClick ? 'cursor-pointer hover:shadow-lg transition-all duration-200' : ''}`}
+      className={`metric-card group ${onClick ? 'cursor-pointer hover:shadow-lg transition-all duration-200' : ''} ${className || ''}`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between">

@@ -33,7 +33,7 @@ export function QueueMonitor() {
 
   useEffect(() => {
     loadQueueMetrics();
-    const interval = setInterval(loadQueueMetrics, 2000); // Update every 2 seconds for real-time monitoring
+    const interval = setInterval(loadQueueMetrics, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -41,13 +41,11 @@ export function QueueMonitor() {
     try {
       setError(null);
 
-      // Try to get real queue data from LocalStack via proxy
       const response = await fetch('/api/localstack/?Action=GetQueueAttributes&QueueUrl=http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/user-analytics-events-events.fifo&AttributeName.1=All&Version=2012-11-05');
 
       if (response.ok) {
         const text = await response.text();
 
-        // Parse XML response
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
 
@@ -75,7 +73,6 @@ export function QueueMonitor() {
         setMetrics(newMetrics);
         setIsConnected(true);
 
-        // Add to history (keep last 50 points)
         setHistory(prev => {
           const newPoint: QueueHistoryPoint = {
             timestamp: new Date(),
@@ -92,7 +89,6 @@ export function QueueMonitor() {
     } catch (err) {
       console.warn('Could not load real queue data, using mock data:', err);
 
-      // Use mock data with some variation
       const mockMetrics: QueueMetrics = {
         visibleMessages: Math.floor(Math.random() * 5),
         notVisibleMessages: Math.floor(Math.random() * 3),
@@ -106,7 +102,6 @@ export function QueueMonitor() {
       setIsConnected(false);
       setError('Using mock data - LocalStack connection failed');
 
-      // Add mock history point
       setHistory(prev => {
         const newPoint: QueueHistoryPoint = {
           timestamp: new Date(),

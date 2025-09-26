@@ -54,7 +54,7 @@ export function ConnectionTest() {
 
       // Test CloudWatch Logs
       try {
-        const logsStats = await LocalStackApiService.getCloudWatchLogsStats();
+        await LocalStackApiService.getCloudWatchLogsStats();
         results.logs = true;
       } catch (error) {
         console.error('CloudWatch Logs test failed:', error);

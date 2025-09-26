@@ -1,18 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Database, RefreshCw, Eye, AlertCircle } from 'lucide-react';
-import { LocalStackApiService } from '../../services/localstack-api';
+import { CheckCircle, Database, XCircle, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+// import { LocalStackApiService } from '../../services/localstack-api'; // TODO: Use when implementing table loading
+import type { AnalyticsPlatformToken, StoreData } from '../../types';
 
-interface DynamoTable {
-  name: string;
-  itemCount: number;
-  sizeBytes: number;
-  creationDateTime?: string;
-}
+
+// TODO: Use when implementing table loading
+// interface DynamoTable {
+//   name: string;
+//   itemCount: number;
+//   sizeBytes: number;
+//   creationDateTime?: string;
+// }
 
 export function StoreTokensView() {
-  const [tables, setTables] = useState<DynamoTable[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<any[]>([]);
+  // TODO: Implement table selection functionality
+  // const [tables, setTables] = useState<DynamoTable[]>([]);
+  // const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  // const [tableData, setTableData] = useState<Record<string, unknown>[]>([]);
+  // Mock data - TODO: Replace with real API call
+  const storeData: StoreData[] = [];
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,8 +29,9 @@ export function StoreTokensView() {
   const loadTables = async () => {
     try {
       setError(null);
-      const stats = await LocalStackApiService.getDynamoDBStats();
-      setTables(stats.tables);
+      // TODO: Implement table loading
+      // const stats = await LocalStackApiService.getDynamoDBStats();
+      // setTables(stats.tables);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar tabelas DynamoDB');
       console.error('Erro ao carregar tabelas:', err);
@@ -33,16 +40,17 @@ export function StoreTokensView() {
     }
   };
 
-  const loadTableData = async (tableName: string) => {
-    try {
-      setSelectedTable(tableName);
-      const data = await LocalStackApiService.scanTable(tableName, 20);
-      setTableData(data);
-    } catch (error) {
-      console.error(`Falha ao carregar dados da tabela ${tableName}:`, error);
-      setTableData([]);
-    }
-  };
+  // TODO: Implement table data loading
+  // const loadTableData = async (_tableName: string) => {
+  //   try {
+  //     setSelectedTable(_tableName);
+  //     const data = await LocalStackApiService.scanTable(_tableName, 20);
+  //     setTableData(data);
+  //   } catch (error) {
+  //     console.error(`Falha ao carregar dados da tabela ${_tableName}:`, error);
+  //     setTableData([]);
+  //   }
+  // };
 
   const getPlatformColor = (platform: string) => {
     switch (platform.toLowerCase()) {
@@ -75,11 +83,11 @@ export function StoreTokensView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Store className="w-6 h-6 text-saipos-blue-600" />
+          <Database className="w-6 h-6 text-saipos-blue-600" />
           <h2 className="text-xl font-bold text-saipos-gray-900">Store Tokens Overview</h2>
         </div>
         <div className="text-sm text-saipos-gray-600 font-medium">
-          Total Stores: {storeData.length} | Total Tokens: {storeData.reduce((sum, store) => sum + store.totalTokens, 0)}
+          Total Stores: {storeData.length} | Total Tokens: {storeData.reduce((sum: number, store: StoreData) => sum + store.totalTokens, 0)}
         </div>
       </div>
 
@@ -94,7 +102,7 @@ export function StoreTokensView() {
 
       {/* Stores Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {storeData.map((store) => (
+        {storeData.map((store: StoreData) => (
           <div key={store.storeId} className="card p-6 border-l-4 border-l-saipos-blue-500">
             {/* Store Header */}
             <div className="flex items-center justify-between mb-4">
@@ -116,7 +124,7 @@ export function StoreTokensView() {
 
             {/* Tokens List */}
             <div className="space-y-3">
-              {store.tokens.map((token) => (
+              {store.tokens.map((token: AnalyticsPlatformToken) => (
                 <div
                   key={token.idPlatformToken}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -171,7 +179,7 @@ export function StoreTokensView() {
           </div>
           <div className="flex space-x-3">
             <button
-              onClick={loadStoreTokens}
+              onClick={() => console.log('Load store tokens not implemented')}
               className="btn-secondary flex items-center space-x-2"
             >
               <Database className="w-4 h-4" />

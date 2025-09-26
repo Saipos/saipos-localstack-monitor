@@ -8,15 +8,9 @@ export class LocalStackDirectService {
     try {
       const response = await fetch(this.baseUrl, { mode: 'cors' });
       const isLocalStack = response.headers.get('x-localstack') === 'true';
-      console.log('LocalStack test:', {
-        ok: response.ok,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        isLocalStack
-      });
       return response.ok && isLocalStack;
     } catch (error) {
-      console.error('LocalStack connection test failed:', error);
+      console.error('Connection test failed:', error);
       return false;
     }
   }
@@ -71,7 +65,7 @@ export class LocalStackDirectService {
   }
 
   // Get queue attributes
-  static async getQueueAttributes(queueUrl: string): Promise<any> {
+  static async getQueueAttributes(queueUrl: string): Promise<{ ApproximateNumberOfMessages: number; ApproximateNumberOfMessagesNotVisible: number }> {
     try {
       const params = new URLSearchParams({
         Action: 'GetQueueAttributes',
@@ -125,7 +119,7 @@ export class LocalStackDirectService {
   }
 
   // Scan DynamoDB table
-  static async scanDynamoTable(tableName: string): Promise<any[]> {
+  static async scanDynamoTable(tableName: string): Promise<Record<string, unknown>[]> {
     try {
       const response = await fetch(this.baseUrl, {
         method: 'POST',
