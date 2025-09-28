@@ -1,5 +1,5 @@
 {
-  "name": "analytics-dashboard",
+  "name": "saipos-localstack-monitor",
   "private": true,
   "version": "0.0.0",
   "type": "module",
