@@ -19,8 +19,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
 
   return (
     <header className="bg-gradient-to-r from-saipos-blue-600 to-saipos-blue-700 shadow-lg">
-      {/* Main Header */}
-      <div className="max-w-[100rem] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-[120rem] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-4">
             <img
@@ -34,14 +33,13 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             </div>
           </div>
 
-          {/* Global Refresh Controls */}
           <GlobalRefreshControl />
         </div>
       </div>
 
       {/* Navigation Tabs */}
       <div className="bg-white/10 backdrop-blur-sm border-t border-white/20">
-        <div className="max-w-[100rem] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[120rem] mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-1 py-3">
             {tabs.map((tab) => {
               const Icon = tab.icon;
