@@ -1,19 +1,20 @@
-// LocalStack service using REST API endpoints (no CORS issues)
-
 import type {
-  TableInfo,
-  QueueInfo,
-  ServiceStats,
+  CloudWatchMetrics,
   DynamoDBListTablesResponse,
   DynamoDBTableDescription,
-  SQSListQueuesResponse,
-  SQSQueueAttributes,
   LambdaFunction,
-  LambdaListFunctionsResponse,
   LambdaGetFunctionResponse,
   LambdaInvocationResponse,
+  LambdaListFunctionsResponse,
   LogGroup,
-  CloudWatchMetrics
+  QueueInfo,
+  ServiceStats,
+  SQSDeleteMessageResponse,
+  SQSListQueuesResponse,
+  SQSMessage,
+  SQSQueueAttributes,
+  SQSReceiveMessageFilteredResponse,
+  TableInfo
 } from '../types';
 import { API_BASE_URL, TEST_LOCALSTACK_URL } from '../utils';
 
@@ -21,36 +22,36 @@ export class LocalStackApiService {
   private static baseUrl = API_BASE_URL;
 
   // Check individual service availability
-  static async isDynamoDBAvailable(): Promise<boolean> {
+  static async isDynamoDBAvailable(signal?: AbortSignal): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/dynamodb/tables`);
+      const response = await fetch(`${this.baseUrl}/dynamodb/tables`, { signal });
       return response.ok;
     } catch {
       return false;
     }
   }
 
-  static async isSQSAvailable(): Promise<boolean> {
+  static async isSQSAvailable(signal?: AbortSignal): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/sqs/queues`);
+      const response = await fetch(`${this.baseUrl}/sqs/queues`, { signal });
       return response.ok;
     } catch {
       return false;
     }
   }
 
-  static async isLambdaAvailable(): Promise<boolean> {
+  static async isLambdaAvailable(signal?: AbortSignal): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/lambda/functions`);
+      const response = await fetch(`${this.baseUrl}/lambda/functions`, { signal });
       return response.ok;
     } catch {
       return false;
     }
   }
 
-  static async isCloudWatchLogsAvailable(): Promise<boolean> {
+  static async isCloudWatchLogsAvailable(signal?: AbortSignal): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/logs/groups`);
+      const response = await fetch(`${this.baseUrl}/logs/groups`, { signal });
       return response.ok;
     } catch {
       return false;
@@ -113,10 +114,10 @@ export class LocalStackApiService {
   }
 
   // DynamoDB operations
-  static async getDynamoDBStats() {
+  static async getDynamoDBStats(signal?: AbortSignal) {
     try {
       // List tables
-      const listResponse = await fetch(`${this.baseUrl}/dynamodb/tables`);
+      const listResponse = await fetch(`${this.baseUrl}/dynamodb/tables`, { signal });
       if (!listResponse.ok) {
         if (listResponse.status === 500) {
           throw new Error('Serviço DynamoDB indisponível');
@@ -133,7 +134,7 @@ export class LocalStackApiService {
 
       for (const tableName of tableNames) {
         try {
-          const describeResponse = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}`);
+          const describeResponse = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}`, { signal });
 
           if (!describeResponse.ok) {
             console.warn(`Failed to describe table ${tableName}`);
@@ -179,9 +180,9 @@ export class LocalStackApiService {
   }
 
   // SQS operations
-  static async getSQSStats() {
+  static async getSQSStats(signal?: AbortSignal) {
     try {
-      const response = await fetch(`${this.baseUrl}/sqs/queues`);
+      const response = await fetch(`${this.baseUrl}/sqs/queues`, { signal });
       if (!response.ok) {
         if (response.status === 500) {
           throw new Error('Serviço SQS indisponível');
@@ -200,7 +201,7 @@ export class LocalStackApiService {
         try {
           const queueName = queueUrl.split('/').pop() || 'unknown';
 
-          const attrResponse = await fetch(`${this.baseUrl}/sqs/queue-attributes?queueUrl=${encodeURIComponent(queueUrl)}`);
+          const attrResponse = await fetch(`${this.baseUrl}/sqs/queue-attributes?queueUrl=${encodeURIComponent(queueUrl)}`, { signal });
 
           if (!attrResponse.ok) {
             console.warn(`Failed to get attributes for queue ${queueUrl}`);
@@ -395,9 +396,9 @@ export class LocalStackApiService {
   }
 
   // Scan table data
-  static async scanTable(tableName: string, limit: number = 50): Promise<Record<string, unknown>[]> {
+  static async scanTable(tableName: string, limit: number = 50, signal?: AbortSignal): Promise<Record<string, unknown>[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}/scan?limit=${limit}`);
+      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}/scan?limit=${limit}`, { signal });
       if (!response.ok) {
         throw new Error(`Failed to scan table: ${response.status}`);
       }
@@ -411,7 +412,7 @@ export class LocalStackApiService {
   }
 
   // Get SQS messages
-  static async getSQSMessages(queueUrl: string, maxMessages: number = 10): Promise<{ MessageId: string; ReceiptHandle: string; Body: string; Attributes?: Record<string, string> }[]> {
+  static async getSQSMessages(queueUrl: string, maxMessages: number = 10, signal?: AbortSignal): Promise<{ MessageId: string; ReceiptHandle: string; Body: string; Attributes?: Record<string, string> }[]> {
     try {
       const response = await fetch(`${this.baseUrl}/sqs/receive-messages`, {
         method: 'POST',
@@ -424,6 +425,7 @@ export class LocalStackApiService {
           waitTimeSeconds: 0, // No long polling for immediate response
           visibilityTimeout: 30
         }),
+        signal
       });
 
       if (!response.ok) {
@@ -442,31 +444,6 @@ export class LocalStackApiService {
   }
 
 
-  // Delete SQS message
-  static async deleteSQSMessage(queueUrl: string, receiptHandle: string): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseUrl}/sqs/delete-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          queueUrl,
-          receiptHandle
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 500) {
-          throw new Error('Serviço SQS indisponível');
-        }
-        throw new Error(`Erro ao deletar mensagem SQS: ${response.status}`);
-      }
-    } catch (error) {
-      console.error(`Failed to delete SQS message:`, error);
-      throw error;
-    }
-  }
 
   // Send SQS message
   static async sendSQSMessage(queueUrl: string, messageBody: string, attributes?: Record<string, string>): Promise<void> {
@@ -536,6 +513,279 @@ export class LocalStackApiService {
     } catch (error) {
       console.error(`Failed to get log events for ${logGroupName}:`, error);
       return [];
+    }
+  }
+
+  // Get detailed table information (describe-table)
+  static async getTableDetails(tableName: string, signal?: AbortSignal): Promise<DynamoDBTableDescription> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}`, { signal });
+      if (!response.ok) {
+        if (response.status === 500) {
+          throw new Error('Serviço DynamoDB indisponível');
+        }
+        throw new Error(`Erro ao obter detalhes da tabela: ${response.status}`);
+      }
+      const data: DynamoDBTableDescription = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`Failed to get table details for ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  // Create item in DynamoDB table
+  static async createTableItem(tableName: string, item: Record<string, unknown>): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}/item`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ item })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 500) {
+          throw new Error('Serviço DynamoDB indisponível');
+        }
+        throw new Error(errorData.error || `Erro ao criar item na tabela: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Item created successfully:', result);
+    } catch (error) {
+      console.error(`Failed to create item in table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  // Delete item from DynamoDB table
+  static async deleteTableItem(tableName: string, key: Record<string, unknown>): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}/item`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ key })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 500) {
+          throw new Error('Serviço DynamoDB indisponível');
+        }
+        throw new Error(errorData.error || `Erro ao deletar item da tabela: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Item deleted successfully:', result);
+    } catch (error) {
+      console.error(`Failed to delete item from table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  // Update item in DynamoDB table
+  static async updateTableItem(tableName: string, item: Record<string, unknown>): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dynamodb/table/${tableName}/item`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ item })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 500) {
+          throw new Error('Serviço DynamoDB indisponível');
+        }
+        throw new Error(errorData.error || `Erro ao atualizar item da tabela: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Item updated successfully:', result);
+    } catch (error) {
+      console.error(`Failed to update item in table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  // Get queue details including FIFO status and max receive count
+  static async getQueueDetails(queueName: string, signal?: AbortSignal): Promise<{
+    queueName: string;
+    queueUrl: string;
+    isFifoQueue: boolean;
+    maxReceiveCount: number;
+    attributes: Record<string, string>;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/sqs/queue/${queueName}/details`, { signal });
+      if (!response.ok) {
+        if (response.status === 500) {
+          throw new Error('Serviço SQS indisponível');
+        }
+        throw new Error(`Erro ao obter detalhes da fila: ${response.status}`);
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`Failed to get queue details for ${queueName}:`, error);
+      throw error;
+    }
+  }
+
+  // Enhanced SQS message retrieval with different visibility modes
+  static async getSQSMessagesFiltered(queueUrl: string, mode: 'available' | 'dlq' = 'available', signal?: AbortSignal): Promise<SQSReceiveMessageFilteredResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/sqs/receive-messages-filtered`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          queueUrl,
+          mode,
+          maxNumberOfMessages: 10
+        }),
+        signal
+      });
+
+      if (!response.ok) {
+        if (response.status === 500) {
+          throw new Error('Serviço SQS indisponível');
+        }
+        throw new Error(`Erro ao obter mensagens SQS: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`Failed to get SQS messages (${mode} mode):`, error);
+      throw error;
+    }
+  }
+
+  // Delete SQS message
+  static async deleteSQSMessage(queueUrl: string, receiptHandle: string, signal?: AbortSignal): Promise<SQSDeleteMessageResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/sqs/delete-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          queueUrl,
+          receiptHandle
+        }),
+        signal
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Failed to delete SQS message:', error);
+      throw error;
+    }
+  }
+
+
+
+  // Enhanced create SQS message for MessageCreator
+  static async createSQSMessage(queueName: string, messageData: {
+    body: string;
+    attributes?: Record<string, { StringValue?: string; BinaryValue?: string; DataType: string }>;
+    delaySeconds?: number;
+    messageGroupId?: string;
+    messageDeduplicationId?: string;
+  }): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/sqs/queue/${queueName}/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 500) {
+          throw new Error('Serviço SQS indisponível');
+        }
+        throw new Error(errorData.error || `Erro ao criar mensagem na fila: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Message created successfully:', result);
+    } catch (error) {
+      console.error(`Failed to create message in queue ${queueName}:`, error);
+      throw error;
+    }
+  }
+
+  // Update SQS message (delete old and send new)
+  static async updateSQSMessage(queueName: string, receiptHandle: string, messageData: {
+    body: string;
+    attributes?: Record<string, { StringValue?: string; BinaryValue?: string; DataType: string }>;
+  }, originalMessage?: SQSMessage): Promise<void> {
+    try {
+      const payload: {
+        receiptHandle: string;
+        body: string;
+        attributes?: Record<string, { StringValue?: string; BinaryValue?: string; DataType: string }>;
+        messageGroupId?: string;
+        messageDeduplicationId?: string;
+      } = {
+        receiptHandle,
+        ...messageData
+      };
+
+      // If this is a FIFO queue, add the required FIFO parameters
+      if (queueName.endsWith('.fifo') && originalMessage) {
+        // Extract MessageGroupId from original message attributes
+        const messageGroupId = originalMessage.Attributes?.MessageGroupId;
+        if (messageGroupId) {
+          payload.messageGroupId = messageGroupId;
+        }
+
+        // Extract MessageDeduplicationId from original message if available
+        const messageDeduplicationId = originalMessage.Attributes?.MessageDeduplicationId;
+        if (messageDeduplicationId) {
+          payload.messageDeduplicationId = messageDeduplicationId;
+        }
+      }
+
+      const response = await fetch(`${this.baseUrl}/sqs/queue/${queueName}/message`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 500) {
+          throw new Error('Serviço SQS indisponível');
+        }
+        throw new Error(errorData.error || `Erro ao atualizar mensagem na fila: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Message updated successfully:', result);
+    } catch (error) {
+      console.error(`Failed to update message in queue ${queueName}:`, error);
+      throw error;
     }
   }
 }
