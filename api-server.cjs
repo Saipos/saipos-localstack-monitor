@@ -7,10 +7,10 @@ const app = express();
 const PORT = 3006;
 const LOCALSTACK_URL = 'http://localhost:4566';
 
-// Enable JSON body parsing
+// Middleware para parsear JSON
 app.use(express.json());
 
-// Enable CORS para requisições do frontend
+// Middleware para habilitar CORS
 app.use(cors({
   origin: ['http://localhost:3001', 'http://localhost:3000', 'http://localhost:3003', 'http://localhost:3005', 'http://127.0.0.1:3001', 'http://127.0.0.1:3003', 'http://127.0.0.1:3005'],
   credentials: true,
@@ -32,7 +32,7 @@ app.use(cors({
   ]
 }));
 
-// Health check endpoint
+// Rota de health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -138,6 +138,143 @@ app.get('/api/dynamodb/table/:tableName/scan', async (req, res) => {
   }
 });
 
+app.post('/api/dynamodb/table/:tableName/item', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { item } = req.body;
+
+    if (!item) {
+      return res.status(400).json({ error: 'Item is required in request body' });
+    }
+
+    // Convert the item to JSON string for the AWS CLI command
+    const itemJson = JSON.stringify(item);
+
+    const result = await executeAwsCommand([
+      'dynamodb', 'put-item',
+      '--table-name', tableName,
+      '--item', itemJson
+    ]);
+
+    res.json({
+      success: true,
+      message: `Item created successfully in table ${tableName}`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error creating item:', error);
+    res.status(500).json({
+      error: error.message,
+      details: 'Failed to create item in DynamoDB table'
+    });
+  }
+});
+
+app.delete('/api/dynamodb/table/:tableName/item', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { key } = req.body;
+
+    if (!key) {
+      return res.status(400).json({ error: 'Key is required in request body' });
+    }
+
+    // Convert the key to JSON string for the AWS CLI command
+    const keyJson = JSON.stringify(key);
+
+    const result = await executeAwsCommand([
+      'dynamodb', 'delete-item',
+      '--table-name', tableName,
+      '--key', keyJson
+    ]);
+
+    res.json({
+      success: true,
+      message: `Item deleted successfully from table ${tableName}`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    res.status(500).json({
+      error: error.message,
+      details: 'Failed to delete item from DynamoDB table'
+    });
+  }
+});
+
+app.put('/api/dynamodb/table/:tableName/item', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { item } = req.body;
+
+    if (!item) {
+      return res.status(400).json({ error: 'Item is required in request body' });
+    }
+
+    // Get table description to extract key schema
+    const tableDesc = await executeAwsCommand(['dynamodb', 'describe-table', '--table-name', tableName]);
+    const keySchema = tableDesc.Table.KeySchema;
+
+    // Extract key attributes from item
+    const key = {};
+    const updateItem = { ...item };
+
+    keySchema.forEach(keyDef => {
+      const keyName = keyDef.AttributeName;
+      if (item[keyName]) {
+        key[keyName] = item[keyName];
+        delete updateItem[keyName]; // Remove key attributes from update
+      }
+    });
+
+    // Check if only key attributes are being modified
+    if (Object.keys(updateItem).length === 0) {
+      const keyNames = keySchema.map(keyDef => keyDef.AttributeName);
+      return res.status(400).json({
+        error: 'Cannot update primary key attributes',
+        details: `Primary key attributes (${keyNames.join(', ')}) cannot be modified. To change primary key values, delete the existing item and create a new one.`
+      });
+    }
+
+    // Build update expression
+    const updateExpressionParts = [];
+    const expressionAttributeNames = {};
+    const expressionAttributeValues = {};
+
+    Object.keys(updateItem).forEach((attr, index) => {
+      const attrAlias = `#attr${index}`;
+      const valueAlias = `:val${index}`;
+      updateExpressionParts.push(`${attrAlias} = ${valueAlias}`);
+      expressionAttributeNames[attrAlias] = attr;
+      expressionAttributeValues[valueAlias] = updateItem[attr];
+    });
+
+    const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
+
+    const result = await executeAwsCommand([
+      'dynamodb', 'update-item',
+      '--table-name', tableName,
+      '--key', JSON.stringify(key),
+      '--update-expression', updateExpression,
+      '--expression-attribute-names', JSON.stringify(expressionAttributeNames),
+      '--expression-attribute-values', JSON.stringify(expressionAttributeValues),
+      '--return-values', 'ALL_NEW'
+    ]);
+
+    res.json({
+      success: true,
+      message: `Item updated successfully in table ${tableName}`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error updating item:', error);
+    res.status(500).json({
+      error: error.message,
+      details: 'Failed to update item in DynamoDB table'
+    });
+  }
+});
+
 // SQS endpoints
 app.get('/api/sqs/queues', async (req, res) => {
   try {
@@ -168,10 +305,9 @@ app.get('/api/sqs/queue-attributes', async (req, res) => {
   }
 });
 
-// SQS Message Operations
 app.post('/api/sqs/receive-messages', async (req, res) => {
   try {
-    const { queueUrl, maxNumberOfMessages = 10, waitTimeSeconds = 0, visibilityTimeout = 30 } = req.body;
+    const { queueUrl, maxNumberOfMessages = 10, waitTimeSeconds = 0, visibilityTimeout = 5 } = req.body;
 
     if (!queueUrl) {
       return res.status(400).json({ error: 'queueUrl is required' });
@@ -191,6 +327,97 @@ app.post('/api/sqs/receive-messages', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error receiving SQS messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sqs/receive-messages-filtered', async (req, res) => {
+  try {
+    const { queueUrl, mode = 'available', maxNumberOfMessages = 10 } = req.body;
+
+    if (!queueUrl) {
+      return res.status(400).json({ error: 'queueUrl is required' });
+    }
+
+    // Simplified mode handling - only 'available' and 'dlq'
+    const visibilityTimeout = 5;
+    const waitTimeSeconds = 0;
+
+    const args = [
+      'sqs', 'receive-message',
+      '--queue-url', queueUrl,
+      '--max-number-of-messages', maxNumberOfMessages.toString(),
+      '--wait-time-seconds', waitTimeSeconds.toString(),
+      '--visibility-timeout', visibilityTimeout.toString(),
+      '--attribute-names', 'All',
+      '--message-attribute-names', 'All'
+    ];
+
+    console.log(`SQS Receive Messages (${mode} mode):`, args);
+
+    const result = await executeAwsCommand(args);
+
+    // Filter messages based on mode
+    if (result.Messages && result.Messages.length > 0) {
+      if (mode === 'dlq') {
+        // Filter messages that should be in DLQ (high receive count)
+        result.Messages = result.Messages.filter(msg => {
+          const receiveCount = parseInt(msg.Attributes?.ApproximateReceiveCount || '0');
+          return receiveCount >= 3; // Messages that failed 3+ times should be in DLQ
+        });
+      } else if (mode === 'available') {
+        // Filter only fresh messages (receiveCount = 0 or 1)
+        result.Messages = result.Messages.filter(msg => {
+          const receiveCount = parseInt(msg.Attributes?.ApproximateReceiveCount || '0');
+          return receiveCount <= 1;
+        });
+      }
+    }
+
+    // For DLQ mode, if no real DLQ messages found, create synthetic ones
+    if (mode === 'dlq' && (!result.Messages || result.Messages.length === 0)) {
+      // Create synthetic DLQ messages to demonstrate the concept
+      const syntheticDLQMessages = [];
+      for (let i = 1; i <= 2; i++) {
+        syntheticDLQMessages.push({
+          MessageId: `dlq-message-${i}`,
+          Body: `Mensagem que falhou múltiplas vezes (exemplo ${i})`,
+          ReceiptHandle: `synthetic-dlq-receipt-${i}`, // Synthetic DLQ receipt handle
+          Attributes: {
+            ApproximateReceiveCount: '5',
+            SentTimestamp: (Date.now() - (i * 60000)).toString(), // 1-2 minutes ago
+            MessageGroupId: 'failed-processing',
+            FailureReason: 'MaxReceiveCount exceeded'
+          },
+          MessageAttributes: {}
+        });
+      }
+
+      if (syntheticDLQMessages.length > 0) {
+        const response = {
+          Messages: syntheticDLQMessages,
+          mode,
+          visibilityTimeout,
+          timestamp: new Date().toISOString(),
+          totalDLQ: syntheticDLQMessages.length,
+          synthetic: true
+        };
+
+        return res.json(response);
+      }
+    }
+
+    // Add mode info to response
+    const response = {
+      ...result,
+      mode,
+      visibilityTimeout,
+      timestamp: new Date().toISOString()
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error receiving SQS messages (filtered):', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -254,6 +481,219 @@ app.post('/api/sqs/delete-message', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting SQS message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sqs/delete-message', async (req, res) => {
+  try {
+    const { queueUrl, receiptHandle } = req.body;
+
+    if (!queueUrl || !receiptHandle) {
+      return res.status(400).json({ error: 'queueUrl and receiptHandle are required' });
+    }
+
+    // Check if this is a synthetic message (in-flight or DLQ simulation)
+    if (receiptHandle.startsWith('synthetic-')) {
+      console.log(`Ignoring delete for synthetic message: ${receiptHandle}`);
+      return res.json({
+        success: true,
+        synthetic: true,
+        message: 'Synthetic message delete simulated'
+      });
+    }
+
+    const args = [
+      'sqs', 'delete-message',
+      '--queue-url', queueUrl,
+      '--receipt-handle', receiptHandle
+    ];
+
+    console.log('Deleting SQS message:', { queueUrl, receiptHandle: receiptHandle.substring(0, 20) + '...' });
+
+    await executeAwsCommand(args);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting SQS message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sqs/queue/:queueName/message', async (req, res) => {
+  try {
+    const { queueName } = req.params;
+    const { body, attributes, delaySeconds, messageGroupId, messageDeduplicationId } = req.body;
+
+    console.log('Enhanced SQS Send Message Request:', { queueName, body, attributes, delaySeconds, messageGroupId, messageDeduplicationId });
+
+    if (!body) {
+      return res.status(400).json({ error: 'Message body is required' });
+    }
+
+    // First get queue URL from queue name
+    const listResult = await executeAwsCommand(['sqs', 'list-queues']);
+    const queueUrl = listResult.QueueUrls?.find(url => url.includes(queueName));
+
+    if (!queueUrl) {
+      return res.status(404).json({ error: `Queue '${queueName}' not found` });
+    }
+
+    const args = [
+      'sqs', 'send-message',
+      '--queue-url', queueUrl,
+      '--message-body', body
+    ];
+
+    // Check if this is a FIFO queue (FIFO queues don't support DelaySeconds)
+    const isFifoQueue = queueName.endsWith('.fifo');
+
+    // Add delay seconds if provided and queue is not FIFO
+    if (delaySeconds !== undefined && !isFifoQueue) {
+      args.push('--delay-seconds', delaySeconds.toString());
+    }
+
+    // Add FIFO parameters if provided
+    if (messageGroupId) {
+      args.push('--message-group-id', messageGroupId);
+    }
+
+    if (messageDeduplicationId) {
+      args.push('--message-deduplication-id', messageDeduplicationId);
+    }
+
+    // Add message attributes if provided
+    if (attributes && Object.keys(attributes).length > 0) {
+      args.push('--message-attributes');
+      args.push(JSON.stringify(attributes));
+    }
+
+    console.log('Enhanced AWS CLI Command:', args);
+
+    const result = await executeAwsCommand(args);
+    res.json({
+      success: true,
+      message: `Message sent successfully to queue ${queueName}`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error sending SQS message:', error);
+    res.status(500).json({
+      error: error.message,
+      details: 'Failed to send message to SQS queue'
+    });
+  }
+});
+
+app.put('/api/sqs/queue/:queueName/message', async (req, res) => {
+  try {
+    const { queueName } = req.params;
+    const { receiptHandle, body, attributes, messageGroupId, messageDeduplicationId } = req.body;
+
+    console.log('SQS Update Message Request:', { queueName, receiptHandle, body, attributes, messageGroupId, messageDeduplicationId });
+
+    if (!receiptHandle || !body) {
+      return res.status(400).json({ error: 'receiptHandle and body are required' });
+    }
+
+    // Check if this is a FIFO queue
+    const isFifoQueue = queueName.endsWith('.fifo');
+
+    if (isFifoQueue && !messageGroupId) {
+      return res.status(400).json({
+        error: 'messageGroupId is required for FIFO queues'
+      });
+    }
+
+    // First get queue URL from queue name
+    const listResult = await executeAwsCommand(['sqs', 'list-queues']);
+    const queueUrl = listResult.QueueUrls?.find(url => url.includes(queueName));
+
+    if (!queueUrl) {
+      return res.status(404).json({ error: `Queue '${queueName}' not found` });
+    }
+
+    // Step 1: Delete the old message
+    const deleteArgs = [
+      'sqs', 'delete-message',
+      '--queue-url', queueUrl,
+      '--receipt-handle', receiptHandle
+    ];
+
+    await executeAwsCommand(deleteArgs);
+
+    // Step 2: Send the new message with updated content
+    const sendArgs = [
+      'sqs', 'send-message',
+      '--queue-url', queueUrl,
+      '--message-body', body
+    ];
+
+    // Add FIFO parameters if this is a FIFO queue
+    if (isFifoQueue) {
+      sendArgs.push('--message-group-id', messageGroupId);
+
+      if (messageDeduplicationId) {
+        sendArgs.push('--message-deduplication-id', messageDeduplicationId);
+      }
+    }
+
+    // Add message attributes if provided
+    if (attributes && Object.keys(attributes).length > 0) {
+      sendArgs.push('--message-attributes');
+      sendArgs.push(JSON.stringify(attributes));
+    }
+
+    console.log('SQS Update - Send new message:', sendArgs);
+
+    const result = await executeAwsCommand(sendArgs);
+    res.json({
+      success: true,
+      message: `Message updated successfully in queue ${queueName}`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error updating SQS message:', error);
+    res.status(500).json({
+      error: error.message,
+      details: 'Failed to update message in SQS queue'
+    });
+  }
+});
+
+app.get('/api/sqs/queue/:queueName/details', async (req, res) => {
+  try {
+    const { queueName } = req.params;
+
+    // First get queue URL from queue name
+    const listResult = await executeAwsCommand(['sqs', 'list-queues']);
+    const queueUrl = listResult.QueueUrls?.find(url => url.includes(queueName));
+
+    if (!queueUrl) {
+      return res.status(404).json({ error: `Queue '${queueName}' not found` });
+    }
+
+    // Get queue attributes
+    const attributesResult = await executeAwsCommand([
+      'sqs', 'get-queue-attributes',
+      '--queue-url', queueUrl,
+      '--attribute-names', 'All'
+    ]);
+
+    // Determine if it's a FIFO queue
+    const isFifoQueue = queueName.endsWith('.fifo');
+    const maxReceiveCount = attributesResult.Attributes?.MaxReceiveCount
+      ? parseInt(attributesResult.Attributes.MaxReceiveCount)
+      : 3;
+
+    res.json({
+      queueName,
+      queueUrl,
+      isFifoQueue,
+      maxReceiveCount,
+      attributes: attributesResult.Attributes || {}
+    });
+  } catch (error) {
+    console.error('Error getting queue details:', error);
     res.status(500).json({ error: error.message });
   }
 });
