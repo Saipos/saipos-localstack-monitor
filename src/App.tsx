@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import saiposLogo from './assets/logo.png';
-import { CONNECTION_STATUS_CONFIG } from './constants';
 import { BasicLocalStackDashboard } from './components/dashboard/BasicLocalStackDashboard';
 import { DebugTestPanel } from './components/dashboard/DebugTestPanel';
 import { DynamoDBView } from './components/dashboard/DynamoDBView';
@@ -9,6 +8,7 @@ import { LambdaView } from './components/dashboard/LambdaView';
 import { SQSView } from './components/dashboard/SQSView';
 import { Header } from './components/layout/Header';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
+import { CONNECTION_STATUS_CONFIG } from './constants';
 import { GlobalRefreshProvider, useGlobalRefresh } from './hooks/useGlobalRefresh';
 
 function AppContent() {
@@ -43,10 +43,9 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-saipos-gray-50 to-saipos-gray-100 font-poppins">
 
-      {/* Navigation tabs */}
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <main style={{ minHeight: 'calc(100vh - 220px)' }} className="max-w-[100rem] mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <main style={{ minHeight: 'calc(100vh - 220px)' }} className="max-w-[120rem] mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <ErrorBoundary>
           {renderContent()}
         </ErrorBoundary>
@@ -54,7 +53,7 @@ function AppContent() {
 
       {/* Footer */}
       <footer className="py-8 border-t border-saipos-gray-200 bg-white">
-        <div className="max-w-[100rem] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[120rem] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <img
