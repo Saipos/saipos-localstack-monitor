@@ -268,7 +268,6 @@ export function DebugTestPanel() {
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Verificar se LocalStack está rodando: <code className="bg-blue-100 px-1 rounded">curl http://localhost:4566/health</code></li>
               <li>• Verificar se API Server está ativo: <code className="bg-blue-100 px-1 rounded">curl http://localhost:3006/health</code></li>
-              <li>• Se as conexões falharem, o dashboard usará dados mock para demonstração</li>
             </ul>
           </div>
         </div>

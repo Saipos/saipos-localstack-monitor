@@ -1,5 +1,5 @@
+import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { LocalStackApiService } from '../../services/localstack-api';
 
 export function ConnectionTest() {
