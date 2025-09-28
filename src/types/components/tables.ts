@@ -1,8 +1,5 @@
-// Table component types and interfaces
-
 import type { BaseComponentProps } from './ui';
 
-// Generic table types
 export interface TableColumn {
   key: string;
   label: string;
@@ -17,7 +14,6 @@ export interface TableSortConfig {
   direction: 'asc' | 'desc';
 }
 
-// DynamoDB specific types
 export interface DynamoDBItem {
   [key: string]: string | number | boolean | null | DynamoDBItem | DynamoDBItem[];
 }
@@ -43,9 +39,14 @@ export interface DynamoDBTableProps extends BaseComponentProps {
   loading?: boolean;
   error?: string | null;
   onExport?: () => void;
+  onDeleteItem?: (item: DynamoDBRawItem) => void;
+  onEditItem?: (item: DynamoDBRawItem) => void;
+  keySchema?: Array<{
+    AttributeName: string;
+    KeyType: 'HASH' | 'RANGE';
+  }>;
 }
 
-// Generic data table props
 export interface DataTableProps<T = Record<string, unknown>> extends BaseComponentProps {
   data: T[];
   columns: TableColumn[];
@@ -61,7 +62,6 @@ export interface DataTableProps<T = Record<string, unknown>> extends BaseCompone
   emptyMessage?: string;
 }
 
-// Table pagination
 export interface TablePaginationProps {
   currentPage: number;
   totalPages: number;

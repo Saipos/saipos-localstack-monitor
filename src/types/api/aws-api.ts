@@ -1,9 +1,55 @@
-// Types exatos baseados nas responses reais das APIs LocalStack
-
-// Namespace para organizar tipos AWS de forma hierárquica
-// DynamoDB Types
 export interface DynamoDBListTablesResponse {
   TableNames: string[];
+}
+
+export interface DynamoDBKeySchema {
+  AttributeName: string;
+  KeyType: 'HASH' | 'RANGE';
+}
+
+export interface DynamoDBAttributeDefinition {
+  AttributeName: string;
+  AttributeType: 'S' | 'N' | 'B';
+}
+
+export interface DynamoDBLocalSecondaryIndex {
+  IndexName: string;
+  KeySchema: DynamoDBKeySchema[];
+  Projection: {
+    ProjectionType: 'ALL' | 'KEYS_ONLY' | 'INCLUDE';
+    NonKeyAttributes?: string[];
+  };
+  IndexSizeBytes?: number;
+  ItemCount?: number;
+}
+
+export interface DynamoDBGlobalSecondaryIndex {
+  IndexName: string;
+  KeySchema: DynamoDBKeySchema[];
+  Projection: {
+    ProjectionType: 'ALL' | 'KEYS_ONLY' | 'INCLUDE';
+    NonKeyAttributes?: string[];
+  };
+  IndexStatus: 'CREATING' | 'UPDATING' | 'DELETING' | 'ACTIVE';
+  ProvisionedThroughput?: {
+    ReadCapacityUnits: number;
+    WriteCapacityUnits: number;
+  };
+  IndexSizeBytes?: number;
+  ItemCount?: number;
+}
+
+export interface DynamoDBProvisionedThroughput {
+  ReadCapacityUnits: number;
+  WriteCapacityUnits: number;
+  LastIncreaseDateTime?: string;
+  LastDecreaseDateTime?: string;
+  NumberOfDecreasesToday?: number;
+}
+
+export interface DynamoDBBillingMode {
+  BillingMode: 'PROVISIONED' | 'PAY_PER_REQUEST';
+  ProvisionedThroughput?: DynamoDBProvisionedThroughput;
 }
 
 export interface DynamoDBTableDescription {
@@ -12,15 +58,32 @@ export interface DynamoDBTableDescription {
     ItemCount: number;
     TableSizeBytes: number;
     CreationDateTime: string;
-    TableStatus: string;
-    KeySchema: Array<{
-      AttributeName: string;
-      KeyType: 'HASH' | 'RANGE';
-    }>;
-    AttributeDefinitions: Array<{
-      AttributeName: string;
-      AttributeType: 'S' | 'N' | 'B';
-    }>;
+    TableStatus: 'CREATING' | 'UPDATING' | 'DELETING' | 'ACTIVE' | 'INACCESSIBLE_ENCRYPTION_CREDENTIALS' | 'ARCHIVING' | 'ARCHIVED';
+    KeySchema: DynamoDBKeySchema[];
+    AttributeDefinitions: DynamoDBAttributeDefinition[];
+    LocalSecondaryIndexes?: DynamoDBLocalSecondaryIndex[];
+    GlobalSecondaryIndexes?: DynamoDBGlobalSecondaryIndex[];
+    BillingModeSummary?: DynamoDBBillingMode;
+    ProvisionedThroughput?: DynamoDBProvisionedThroughput;
+    TableArn?: string;
+    TableId?: string;
+    StreamSpecification?: {
+      StreamEnabled: boolean;
+      StreamViewType?: 'KEYS_ONLY' | 'NEW_IMAGE' | 'OLD_IMAGE' | 'NEW_AND_OLD_IMAGES';
+    };
+    LatestStreamLabel?: string;
+    LatestStreamArn?: string;
+    RestoreSummary?: {
+      SourceBackupArn?: string;
+      SourceTableArn?: string;
+      RestoreDateTime: string;
+      RestoreInProgress: boolean;
+    };
+    SSEDescription?: {
+      Status?: 'ENABLING' | 'ENABLED' | 'DISABLING' | 'DISABLED' | 'UPDATING';
+      SSEType?: 'AES256' | 'KMS';
+      KMSMasterKeyArn?: string;
+    };
   };
 }
 
@@ -31,7 +94,21 @@ export interface DynamoDBScanResponse {
   LastEvaluatedKey?: Record<string, unknown>;
 }
 
-// SQS Types
+export interface DynamoDBPutItemRequest {
+  TableName: string;
+  Item: Record<string, unknown>;
+  ConditionExpression?: string;
+  ExpressionAttributeNames?: Record<string, string>;
+  ExpressionAttributeValues?: Record<string, unknown>;
+}
+
+export interface DynamoDBPutItemResponse {
+  ConsumedCapacity?: {
+    TableName: string;
+    CapacityUnits: number;
+  };
+}
+
 export interface SQSListQueuesResponse {
   QueueUrls: string[];
 }
@@ -51,6 +128,12 @@ export interface SQSQueueAttributes {
   };
 }
 
+export interface SQSMessageAttributes {
+  StringValue?: string;
+  BinaryValue?: string;
+  DataType: string;
+}
+
 export interface SQSMessage {
   MessageId: string;
   ReceiptHandle: string;
@@ -61,11 +144,25 @@ export interface SQSMessage {
     BinaryValue?: string;
     DataType: string;
   }>;
-  Attributes?: Record<string, string>;
+  Attributes?: Record<string, string> & {
+    ApproximateReceiveCount?: string;
+    ApproximateFirstReceiveTimestamp?: string;
+    SentTimestamp?: string;
+    SenderId?: string;
+  };
 }
 
 export interface SQSReceiveMessageResponse {
   Messages: SQSMessage[];
+}
+
+export interface SQSMessageWithStatus extends SQSMessage {
+  status: 'normal' | 'warning' | 'critical' | 'dead-letter';
+  receiveCount: number;
+  maxReceiveCount?: number;
+  isProblematic: boolean;
+  ageInQueue: number; // milliseconds
+  retryAttempts: number;
 }
 
 export interface SQSSendMessageResponse {
@@ -75,7 +172,21 @@ export interface SQSSendMessageResponse {
   SequenceNumber?: string;
 }
 
-// Lambda Types
+export interface SQSDeleteMessageResponse {
+  success: boolean;
+  synthetic?: boolean;
+  message?: string;
+}
+
+export interface SQSReceiveMessageFilteredResponse extends SQSReceiveMessageResponse {
+  mode: 'available' | 'dlq';
+  visibilityTimeout: number;
+  timestamp: string;
+  totalDLQ?: number;
+  totalInFlight?: number;
+  synthetic?: boolean;
+}
+
 export interface LambdaEnvironment {
   Variables: Record<string, string>;
 }
@@ -127,7 +238,6 @@ export interface LambdaInvocationResponse {
   MemoryUsed?: number;
 }
 
-// CloudWatch Types
 export interface LogGroup {
   logGroupName: string;
   creationTime: number;
@@ -168,7 +278,6 @@ export interface LogEventsResponse {
   nextBackwardToken?: string;
 }
 
-// CloudWatch Metrics Types
 export interface MetricDataPoint {
   Timestamp: string;
   Value?: number;

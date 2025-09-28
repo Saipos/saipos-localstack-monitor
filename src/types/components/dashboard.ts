@@ -1,9 +1,14 @@
 // Dashboard component types and interfaces
 
+import type {
+  DynamoDBTableDescription,
+  LambdaFunction,
+  LogGroup,
+} from '../api/aws-api';
+import type { AnalyticsPlatformToken, TableInfo } from '../domain';
+import type { DynamoDBRawItem } from './tables';
 import type { BaseComponentProps } from './ui';
-import type { AnalyticsPlatformToken } from '../domain';
 
-// Dashboard section props
 export interface ServiceMetricsSectionProps extends BaseComponentProps {
   stats: {
     totalTables: number;
@@ -17,7 +22,6 @@ export interface ServiceMetricsSectionProps extends BaseComponentProps {
   loading?: boolean;
 }
 
-// Store and token related types
 export interface StoreData {
   storeId: number;
   totalTokens: number;
@@ -32,7 +36,6 @@ export interface StoreTokensViewProps extends BaseComponentProps {
   onRefresh?: () => void;
 }
 
-// Lambda function details
 export interface LambdaFunctionDetailsProps extends BaseComponentProps {
   functionName: string;
   functionData: {
@@ -47,7 +50,6 @@ export interface LambdaFunctionDetailsProps extends BaseComponentProps {
   onClose?: () => void;
 }
 
-// Log event types for components
 export interface LogEvent {
   timestamp: number;
   message: string;
@@ -62,7 +64,6 @@ export interface LogStream {
   storedBytes: number;
 }
 
-// Lambda logs viewer
 export interface LambdaLogsViewerProps extends BaseComponentProps {
   functionName?: string;
   autoRefresh?: boolean;
@@ -70,7 +71,6 @@ export interface LambdaLogsViewerProps extends BaseComponentProps {
   onEventClick?: (event: LogEvent) => void;
 }
 
-// Invocation result for Lambda testing
 export interface InvocationResult {
   statusCode: number;
   payload: string;
@@ -80,7 +80,6 @@ export interface InvocationResult {
   logResult?: string;
 }
 
-// Debug test results
 export interface DebugResult {
   test: string;
   status: 'SUCCESS' | 'FAILED' | 'ERROR';
@@ -101,12 +100,10 @@ export interface TestResults {
   logs: boolean | null;
 }
 
-// Dashboard component props
 export interface BasicLocalStackDashboardProps extends BaseComponentProps {
   onTabChange?: (tab: string) => void;
 }
 
-// Lambda function display types
 export interface LambdaFunctionDisplay {
   functionName: string;
   runtime: string;
@@ -117,7 +114,6 @@ export interface LambdaFunctionDisplay {
   codeSize?: number;
 }
 
-// SQS Queue types
 export interface QueueInfo {
   url: string;
   name: string;
@@ -142,7 +138,6 @@ export interface QueueHistoryPoint {
   delayed: number;
 }
 
-// DynamoDB table types for dashboard
 export interface DynamoTable {
   name: string;
   itemCount: number;
@@ -151,21 +146,52 @@ export interface DynamoTable {
   status?: 'ACTIVE' | 'CREATING' | 'DELETING' | 'UPDATING';
 }
 
-// Dashboard section props
+export interface TableInfoPanelProps extends BaseComponentProps {
+  tableDetails: DynamoDBTableDescription;
+  onClose: () => void;
+}
+
+export interface ItemCreatorProps extends BaseComponentProps {
+  tableName: string;
+  tableSchema: {
+    keySchema: Array<{
+      AttributeName: string;
+      KeyType: 'HASH' | 'RANGE';
+    }>;
+    attributeDefinitions: Array<{
+      AttributeName: string;
+      AttributeType: 'S' | 'N' | 'B';
+    }>;
+  };
+  onItemCreated: (item: DynamoDBRawItem) => void;
+  onCancel: () => void;
+}
+
+export interface DynamoFormField {
+  name: string;
+  type: 'S' | 'N' | 'B' | 'BOOL' | 'SS' | 'NS' | 'M' | 'L';
+  required: boolean;
+  isKey: boolean;
+  keyType?: 'HASH' | 'RANGE';
+  value?: string;
+  placeholder?: string;
+  description?: string;
+}
+
 export interface LambdaSectionProps extends BaseComponentProps {
-  functions: any[]; // TODO: Replace with proper LambdaFunction type
+  functions: LambdaFunction[];
   isServiceAvailable: boolean;
   onFunctionClick?: (functionName: string) => void;
 }
 
 export interface LogsSectionProps extends BaseComponentProps {
-  logGroups: any[]; // TODO: Replace with proper LogGroup type
+  logGroups: LogGroup[];
   isServiceAvailable: boolean;
   onLogGroupClick?: (logGroup: string) => void;
 }
 
 export interface DynamoDBSectionProps extends BaseComponentProps {
-  tables: any[]; // TODO: Replace with proper TableInfo type
+  tables: TableInfo[];
   isServiceAvailable: boolean;
   onTableClick?: (tableName: string) => void;
 }
