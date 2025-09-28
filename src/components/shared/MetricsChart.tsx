@@ -1,6 +1,6 @@
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
-import type { ChartDataPoint, ChartColorKey, MetricsChartProps } from '../../types';
+import type { ChartColorKey, MetricsChartProps } from '../../types';
 
 export function MetricsChart({
   title,
