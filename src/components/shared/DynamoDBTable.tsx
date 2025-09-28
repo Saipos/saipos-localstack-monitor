@@ -1,8 +1,8 @@
-import { ChevronDown, ChevronUp, Database, Download, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Database, Download, Edit, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { DynamoDBItem, DynamoDBRawItem, DynamoDBTableProps } from '../../types';
 
-export function DynamoDBTable({ data, tableName }: DynamoDBTableProps) {
+export function DynamoDBTable({ data, tableName, onDeleteItem, onEditItem }: DynamoDBTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -47,6 +47,19 @@ export function DynamoDBTable({ data, tableName }: DynamoDBTableProps) {
     });
     return Array.from(allKeys).sort();
   }, [convertedData]);
+
+
+  const handleDeleteClick = (item: DynamoDBRawItem) => {
+    if (onDeleteItem) {
+      onDeleteItem(item);
+    }
+  };
+
+  const handleEditClick = (item: DynamoDBRawItem) => {
+    if (onEditItem) {
+      onEditItem(item);
+    }
+  };
 
   // Filtro por busca
   const filteredData = useMemo(() => {
@@ -196,22 +209,54 @@ export function DynamoDBTable({ data, tableName }: DynamoDBTableProps) {
                     </div>
                   </th>
                 ))}
+                {(onDeleteItem || onEditItem) && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50 border-l border-gray-200 shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10 w-[120px] max-w-[120px] min-w-[120px]">
+                    Ações
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedData.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  {columns.map(column => (
-                    <td
-                      key={column}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                      title={String(row[column] || '')}
-                    >
-                      {formatValue(row[column])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {paginatedData.map((row, index) => {
+                const originalItem = data[sortedData.indexOf(row)];
+                return (
+                  <tr key={index} className="hover:bg-gray-50 group">
+                    {columns.map(column => (
+                      <td
+                        key={column}
+                        className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                        title={String(row[column] || '')}
+                      >
+                        {formatValue(row[column])}
+                      </td>
+                    ))}
+                    {(onDeleteItem || onEditItem) && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 sticky right-0 bg-white group-hover:bg-gray-50 border-l border-gray-200 shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10 w-[120px] max-w-[120px] min-w-[120px]">
+                        <div className="flex items-center space-x-2">
+                          {onEditItem && (
+                            <button
+                              onClick={() => handleEditClick(originalItem)}
+                              className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                              title="Editar item"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )}
+                          {onDeleteItem && (
+                            <button
+                              onClick={() => handleDeleteClick(originalItem)}
+                              className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                              title="Deletar item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
