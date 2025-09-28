@@ -1,12 +1,15 @@
 import { Clock, Copy, Eye, EyeOff, MessageSquare, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LocalStackApiService } from '../../services/localstack-api';
-import { formatTimestamp } from '../../utils/formatters';
 import type { SQSMessage, SQSMessagesViewerProps } from '../../types';
+import { formatTimestamp } from '../../utils/formatters';
 
 interface SQSMessagesViewerRequiredProps {
   queueUrl: string;
   queueName: string;
+  messages: SQSMessage[];
+  loading: boolean;
+  error: string | null;
 }
 
 export function SQSMessagesViewer({
@@ -14,10 +17,7 @@ export function SQSMessagesViewer({
   queueName,
   messages: propMessages,
   loading: propLoading,
-  error: propError,
-  onMessageDelete,
-  onRefresh,
-  maxMessages = 10
+  error: propError
 }: SQSMessagesViewerRequiredProps & Partial<SQSMessagesViewerProps>) {
   const [messages, setMessages] = useState<SQSMessage[]>(propMessages || []);
   const [loading, setLoading] = useState(propLoading || false);
@@ -31,7 +31,7 @@ export function SQSMessagesViewer({
     setError(null);
     try {
       const msgs = await LocalStackApiService.getSQSMessages(queueUrl, 10);
-      setMessages(msgs);
+      setMessages(msgs as SQSMessage[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar mensagens');
       setMessages([]);
@@ -261,7 +261,7 @@ export function SQSMessagesViewer({
                             </label>
                             <div className="bg-gray-50 p-3 rounded-md">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                {Object.entries(message.Attributes).map(([key, value]) => (
+                                {Object.entries(message.Attributes || {}).map(([key, value]) => (
                                   <div key={key} className="flex justify-between">
                                     <span className="font-medium text-gray-600">{key}:</span>
                                     <span className="text-gray-800">

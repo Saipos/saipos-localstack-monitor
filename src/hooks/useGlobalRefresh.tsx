@@ -276,6 +276,7 @@ export function GlobalRefreshProvider({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useGlobalRefresh() {
   const context = useContext(GlobalRefreshContext);
   if (!context) {
@@ -285,6 +286,7 @@ export function useGlobalRefresh() {
 }
 
 // Hook para páginas registrarem sua função de refresh
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePageRefresh(pageId: string, refreshFunction: () => Promise<void>) {
   const { registerRefreshFunction, unregisterRefreshFunction } = useGlobalRefresh();
 

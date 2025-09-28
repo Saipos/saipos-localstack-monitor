@@ -18,11 +18,10 @@ import { LocalStackApiService } from '../../services/localstack-api';
 import type {
   CloudWatchInsights,
   CloudWatchMetrics,
-  LambdaFunction,
-  LambdaGetFunctionResponse,
+  InvocationResult,
   LambdaFunctionDetailsProps,
-  LogEvent,
-  InvocationResult
+  LambdaGetFunctionResponse,
+  LogEvent
 } from '../../types';
 import { formatBytes } from '../../utils';
 import { MetricsChart } from './MetricsChart';
@@ -74,7 +73,7 @@ export function LambdaFunctionDetails({ functionName, functionData }: LambdaFunc
         LocalStackApiService.getLambdaInsights(functionName)
       ]);
       setMetrics(metricsData);
-      setInsights(insightsData);
+      setInsights(insightsData as unknown as CloudWatchInsights);
     } catch (error) {
       console.error('Erro ao carregar métricas:', error);
       setMetrics({
@@ -98,7 +97,7 @@ export function LambdaFunctionDetails({ functionName, functionData }: LambdaFunc
     setLoadingLogs(true);
     try {
       const logGroupName = `/aws/lambda/${functionName}`;
-      const events = await LocalStackApiService.getLogEvents(logGroupName, 50);
+      const events = await LocalStackApiService.getLogEvents(logGroupName);
       setLogs(events);
     } catch (error) {
       console.error('Erro ao carregar logs:', error);
@@ -178,20 +177,20 @@ export function LambdaFunctionDetails({ functionName, functionData }: LambdaFunc
               </span>
               <span className="flex items-center space-x-1">
                 <Database className="w-3 h-3" />
-                <span>{formatBytes(functionData.CodeSize)}</span>
+                <span>{formatBytes(functionData.CodeSize || 0)}</span>
               </span>
               <span className="flex items-center space-x-1">
                 <Clock className="w-3 h-3" />
-                <span>Modificado em {new Date(functionData.LastModified).toLocaleString()}</span>
+                <span>Modificado em {new Date(functionData.LastModified || 0).toLocaleString()}</span>
               </span>
             </div>
           </div>
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-            functionData.State?.toLowerCase() === 'active'
+            (fullFunctionData?.Configuration?.State || 'Unknown').toLowerCase() === 'active'
               ? 'bg-green-100 text-green-800'
               : 'bg-gray-100 text-gray-800'
           }`}>
-            {functionData.State || 'Unknown'}
+            {fullFunctionData?.Configuration?.State || 'Unknown'}
           </span>
         </div>
       </div>
@@ -240,15 +239,15 @@ export function LambdaFunctionDetails({ functionName, functionData }: LambdaFunc
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Estado:</span>
-                  <span className="font-medium">{functionData.State}</span>
+                  <span className="font-medium">{fullFunctionData?.Configuration?.State || 'Unknown'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tamanho do Código:</span>
-                  <span className="font-medium">{formatBytes(functionData.CodeSize)}</span>
+                  <span className="font-medium">{formatBytes(functionData.CodeSize || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Última Modificação:</span>
-                  <span className="font-medium">{new Date(functionData.LastModified).toLocaleDateString()}</span>
+                  <span className="font-medium">{functionData && functionData.LastModified ? new Date(functionData.LastModified).toLocaleDateString() : 0}</span>
                 </div>
               </div>
             </div>
@@ -384,8 +383,8 @@ export function LambdaFunctionDetails({ functionName, functionData }: LambdaFunc
                   {logs.map((log, index) => (
                     <div key={index} className="p-4 hover:bg-gray-50">
                       <div className="flex items-start space-x-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getLevelColor(log.level || 'INFO')}`}>
-                          {log.level || 'INFO'}
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getLevelColor((log as LogEvent & { level?: string }).level || 'INFO')}`}>
+                          {(log as LogEvent & { level?: string }).level || 'INFO'}
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-gray-500 mb-1">
